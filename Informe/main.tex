@@ -61,7 +61,7 @@ $q_\alpha$, buscando perturbaciones mínimas $X'$ tales que el puntaje
 de no conformidad satisfaga estrictamente la condición de unicidad del
 conjunto de predicción. Adicionalmente, se garantiza la plausibilidad
 morfológica de los contrafácticos mediante restricciones de coherencia
-multivariada basadas en distancia de Mahalanobis. El enfoque se evalúa
+multivariada basadas en distancia de Mahalanobis condicional por clase. El enfoque se evalúa
 sobre el \textit{Dry Bean Dataset}, un conjunto de datos tabular con
 alto solapamiento inter-clase, especialmente adecuado para generar
 instancias conformemente ambiguas. Se hipotetiza que la ambigüedad
@@ -74,7 +74,7 @@ clasificadores conformes con nivel de confianza $1 - \alpha = 0{,}90$.
 \begin{IEEEkeywords}
 predicción conforme, explicaciones contrafácticas, cuantificación de
 incertidumbre, inteligencia artificial explicable, optimización restringida,
-clasificación tabular, distancia de Mahalanobis.
+clasificación tabular, distancia de Mahalanobis condicional.
 \end{IEEEkeywords}
 
 % ─────────────────────────────────────────────
@@ -147,7 +147,7 @@ contrafácticas específicamente diseñadas para conjuntos de predicción
 conformes, demostrando la viabilidad del enfoque en datos de texto. Este
 trabajo se diferencia en tres aspectos: (1) se enfoca en datos tabulares
 con características morfológicas correlacionadas; (2) incorpora
-restricciones de plausibilidad multivariada mediante distancia de Mahalanobis;
+restricciones de plausibilidad multivariada mediante distancia de Mahalanobis condicional por clase;
 y (3) evalúa explícitamente la relación entre la ambigüedad y la
 proximidad a fronteras de decisión mediante reducción de dimensionalidad.
 
@@ -180,7 +180,7 @@ Esta pregunta motiva un estudio con tres objetivos complementarios y medibles:
     de resolución conforme $\geq 70\,\%$ sobre las instancias ambiguas del
     conjunto de evaluación (20\,\% del dataset), definida como la proporción
     de instancias para las cuales el algoritmo encuentra un contrafáctico
-    $X'$ con $|C(X')| = 1$, $d_M(X', \mathcal{D}) \leq \tau_M$ y
+    $X'$ con $|C(X')| = 1$, $d_M(X', \mathcal{D}_{Y_t}) \leq \tau_M$ y
     $\|X' - X\|_2 \leq \tau_d$.
 
     \item[$\bullet$] \textbf{O3 --- Comparación de modelos}: establecer si
@@ -266,7 +266,7 @@ Para ello se define una función de pérdida compuesta:
 \begin{equation}
     \mathcal{L}(x,x') = \lambda \left(\|x'-x\|_1 + \|x'-x\|_2\right)
     + \mathcal{L}_{\mathrm{conf}}(x', y_t, q_\alpha)
-    + \gamma \, d_M(x', \mathcal{D}),
+    + \gamma \, d_M(x', \mathcal{D}_{y_t}),
 \end{equation}
 donde:
 \begin{itemize}
@@ -278,7 +278,7 @@ donde:
         &\quad + \sum_{j \neq t} \max\bigl(0,\, q_\alpha - s(x', y_j)\bigr),
     \end{align}
     de modo que se fuerza la inclusión de $y_t$ en $C(x')$ y la exclusión del resto de las clases.\cite{b1}
-    \item $d_M(x', \mathcal{D})$ es la distancia de Mahalanobis de $x'$ respecto a la distribución de entrenamiento $\mathcal{D}$, y $\gamma>0$ pondera la restricción de plausibilidad.
+    \item $d_M(x', \mathcal{D}_{y_t})$ es la distancia de Mahalanobis condicional de $x'$ respecto a la distribución de la clase objetivo $y_t$ ($\mathcal{D}_{y_t}$), y $\gamma>0$ pondera la restricción de plausibilidad.
 \end{itemize}
 
 La optimización se realiza mediante un algoritmo iterativo (por ejemplo, descenso de gradiente o un método cuasi--Newton) sobre $x'$, con hiperparámetros que controlan el peso relativo de cada término en la pérdida.\cite{b4,b6} En la práctica, el procedimiento se ejecuta sobre lotes de instancias ambiguas, lo que permite medir la tasa de éxito en resolver la ambigüedad, el costo de la perturbación y la preservación de plausibilidad.
@@ -287,11 +287,11 @@ La optimización se realiza mediante un algoritmo iterativo (por ejemplo, descen
 
 Para garantizar que los contrafácticos generados sean morfológicamente posibles ---es decir, que correspondan a frijoles reales--- no es suficiente restringir cada característica a su rango univariado observado. Las 16 características del dataset exhiben fuertes correlaciones estructurales (por ejemplo, el área crece aproximadamente de forma cuadrática con los ejes principales), por lo que una perturbación que viole estas relaciones produciría instancias físicamente incoherentes.
 
-Se incorpora la distancia de Mahalanobis $d_M(x', \mathcal{D})$ como restricción suave en la función de pérdida, donde $\mathcal{D}$ representa la distribución empírica de los datos de entrenamiento, caracterizada por su media $\mu$ y matriz de covarianza $\Sigma$:
+Se incorpora la distancia de Mahalanobis condicional $d_M(x', \mathcal{D}_{y_t})$ como restricción suave en la función de pérdida, donde $\mathcal{D}_{y_t}$ representa la distribución empírica de los datos de entrenamiento correspondientes a la clase objetivo $y_t$, caracterizada por su media $\mu_{y_t}$ y su matriz de covarianza $\Sigma_{y_t}$:
 \begin{equation}
-    d_M(x', \mathcal{D}) = \sqrt{(x' - \mu)^\top \Sigma^{-1} (x' - \mu)}.
+    d_M(x', \mathcal{D}_{y_t}) = \sqrt{(x' - \mu_{y_t})^\top \Sigma_{y_t}^{-1} (x' - \mu_{y_t})}.
 \end{equation}
-Un valor bajo de $d_M$ indica que $x'$ es coherente con la variabilidad multivariada de los datos originales; en los experimentos se analizará la distribución de $d_M$ antes y después de la generación de contrafácticos para verificar que la plausibilidad se mantiene dentro de rangos razonables.\cite{b10}
+Un valor bajo de $d_M$ indica que $x'$ es coherente con la morfología y variabilidad multivariada de la clase objetivo $y_t$ a la que se aspira transicionar. El uso de la métrica condicionada por clase evita penalizar contrafácticos plausibles que se alejan de la media global debido a la heterogeneidad física entre clases (por ejemplo, entre frijoles de tamaño extremo como \textit{Bombay} y \textit{Dermason}). En los experimentos se analizará la distribución de esta distancia condicional para verificar que la plausibilidad de los contrafácticos se mantiene dentro de los rangos característicos de la clase objetivo.\cite{b10}
 
 % ─────────────────────────────────────────────
 \section{Plan de Evaluación}
@@ -308,8 +308,8 @@ El enfoque propuesto será evaluado mediante las siguientes métricas:
     perturbación necesaria, medida en normas $L_1$ y $L_2$.
 
     \item[$\bullet$] \textbf{Preservación de plausibilidad}: distancia de
-    Mahalanobis promedio de los contrafácticos respecto a la distribución
-    de entrenamiento.
+    Mahalanobis condicional promedio de los contrafácticos respecto a la
+    distribución de la clase objetivo.
 
     \item[$\bullet$] \textbf{Reducción del conjunto de predicción}: cambio
     en $|C(X)|$ antes y después de la perturbación.

@@ -1,0 +1,419 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Resolución de Ambigüedad en Predicción Conforme\\
+mediante Optimización de Explicaciones Contrafácticas\\
+en Espacios de Características Tabulares}
+
+\author{
+\IEEEauthorblockN{Gonzalo Michea}
+\IEEEauthorblockA{\textit{Ingeniería Civil en Informática} \\
+\textit{Universidad Técnica Federico Santa María}\\
+Valparaíso, Chile \\
+gonzalo.michea@usm.cl}
+\and
+\IEEEauthorblockN{Sofía Ramírez}
+\IEEEauthorblockA{\textit{Ingeniería Civil en Informática} \\
+\textit{Universidad Técnica Federico Santa María}\\
+Valparaíso, Chile \\
+sofia.ramirez@usm.cl}
+\and
+\IEEEauthorblockN{Marco Repetto}
+\IEEEauthorblockA{\textit{Ingeniería Civil en Informática} \\
+\textit{Universidad Técnica Federico Santa María}\\
+Valparaíso, Chile \\
+marco.repetto@usm.cl}
+}
+
+\maketitle
+
+\begin{abstract}
+La predicción conforme (PC) ofrece un marco estadístico robusto para la
+cuantificación de incertidumbre, garantizando cobertura marginal formal
+bajo el único supuesto de intercambiabilidad de los datos. Sin embargo,
+la aparición de conjuntos de predicción ambiguos ($|C(X)| > 1$) limita
+su aplicabilidad en sistemas críticos de toma de decisiones, como el
+diagnóstico clínico o la evaluación de riesgo crediticio, donde se
+requiere una decisión única y justificable. Este artículo propone un
+marco metodológico que integra la PC con la Inteligencia Artificial
+Explicable (XAI) mediante explicaciones contrafácticas optimizadas, un
+método post-hoc agnóstico al modelo que genera perturbaciones mínimas
+e interpretables sobre las características de entrada. A diferencia de
+enfoques anteriores, se define una función de pérdida compuesta
+$\mathcal{L}(X, X')$ que incorpora explícitamente el umbral conforme
+$q_\alpha$, buscando perturbaciones mínimas $X'$ tales que el puntaje
+de no conformidad satisfaga estrictamente la condición de unicidad del
+conjunto de predicción. Adicionalmente, se garantiza la plausibilidad
+morfológica de los contrafácticos mediante restricciones de coherencia
+multivariada basadas en distancia de Mahalanobis. El enfoque se evalúa
+sobre el \textit{Dry Bean Dataset}, un conjunto de datos tabular con
+alto solapamiento inter-clase, especialmente adecuado para generar
+instancias conformemente ambiguas. Se hipotetiza que la ambigüedad
+conforme está estrechamente relacionada con la proximidad a las fronteras
+de decisión, y que el razonamiento contrafáctico ofrece un mecanismo
+interpretable y accionable para navegar la incertidumbre en
+clasificadores conformes con nivel de confianza $1 - \alpha = 0{,}90$.
+\end{abstract}
+
+\begin{IEEEkeywords}
+predicción conforme, explicaciones contrafácticas, cuantificación de
+incertidumbre, inteligencia artificial explicable, optimización restringida,
+clasificación tabular, distancia de Mahalanobis.
+\end{IEEEkeywords}
+
+% ─────────────────────────────────────────────
+\section{Introducción}
+
+En numerosos dominios de alto impacto, los sistemas de clasificación
+automática deben no solo predecir una etiqueta, sino también comunicar
+cuándo \emph{no} están en condiciones de hacerlo con suficiente certeza.
+En medicina, por ejemplo, un modelo que clasifica imágenes histológicas
+puede enfrentarse a muestras que comparten rasgos de dos o más patologías;
+en finanzas, un clasificador de riesgo crediticio puede encontrar
+solicitantes cuyo perfil se ubica en la frontera entre distintas categorías
+de riesgo. En ambos casos, una predicción puntual sin cuantificación de
+incertidumbre puede inducir decisiones clínicas o económicas erróneas con
+consecuencias graves. La necesidad de sistemas de predicción con garantías
+estadísticas formales y capacidad de explicación es, por lo tanto, un
+problema abierto y de creciente relevancia en la comunidad de aprendizaje
+automático.
+
+Los modelos de clasificación contemporáneos, a pesar de su alta precisión
+empírica, carecen frecuentemente de mecanismos formales para comunicar su
+propia incertidumbre. La Predicción Conforme (PC) ha surgido como solución
+teórica potente \cite{b3}, transformando predicciones puntuales en conjuntos
+de predicción $C(X)$ que contienen la etiqueta verdadera con probabilidad
+predefinida $1-\alpha$, bajo el único supuesto de intercambiabilidad de los
+datos.
+
+Sin embargo, en regiones del espacio de características donde las fronteras
+de decisión se solapan, el modelo produce conjuntos ambiguos ($|C(X)| > 1$).
+Consideremos el escenario concreto de un sistema de apoyo al diagnóstico que
+devuelve $C(X) = \{\text{patología A},\, \text{patología B}\}$: el clínico
+sabe que el modelo es estadísticamente correcto al 90\,\%, pero no dispone de
+información accionable sobre qué característica del paciente, si cambiara,
+inclinaría la predicción hacia una sola clase. Este fenómeno no debe verse
+solo como un fallo del modelo, sino como una señal estructural: la instancia
+$X$ se encuentra en una región de alta incertidumbre epistémica, donde
+cambios pequeños e interpretables en las características pueden ser
+suficientes para resolver la ambigüedad \cite{b1}.
+
+En este trabajo, se aborda la ambigüedad conforme como un estado de
+incertidumbre \textit{resoluble} mediante perturbaciones contrafácticas
+\cite{b4}. Las explicaciones contrafácticas constituyen un método de XAI
+\textbf{post-hoc}, \textbf{agnóstico al modelo} y de alcance \textbf{local}
+(por instancia), que responde a la pregunta: ``¿qué cambios mínimos en las
+características de entrada provocarían un resultado diferente?'' \cite{b4,b7}.
+La contribución principal es la formalización de un proceso de búsqueda
+que garantiza que el nuevo punto $X'$ no solo cambie la clase predicha, sino
+que colapse el conjunto de predicción a un singleton $\{Y_t\}$,
+proporcionando una decisión única y estadísticamente respaldada.
+
+\subsection{Contexto de los Datos}
+
+El estudio se realiza sobre el \textbf{Dry Bean Dataset} \cite{b5},
+un conjunto de datos \textbf{público}, disponible en el repositorio
+UCI Machine Learning Repository, compuesto por 13\,611 instancias de
+siete variedades de frijol seco descritas mediante 16 características
+morfológicas continuas obtenidas mediante visión por computadora. Los
+datos no requieren imputación de valores faltantes, aunque sí un
+preprocesamiento de estandarización ($\mu=0$, $\sigma=1$) previo al
+entrenamiento. Las clases presentan un leve desbalanceo (la clase
+\textit{Bombay} tiene 522 instancias frente a las 3546 de
+\textit{Dermason}), lo que será considerado en el análisis de resultados.
+La elección de este dataset se justifica en detalle en la
+Sección~\ref{sec:datos}.
+
+\subsection{Trabajos Relacionados}
+
+Maalej et al.\ \cite{b6} propusieron recientemente explicaciones
+contrafácticas específicamente diseñadas para conjuntos de predicción
+conformes, demostrando la viabilidad del enfoque en datos de texto. Este
+trabajo se diferencia en tres aspectos: (1) se enfoca en datos tabulares
+con características morfológicas correlacionadas; (2) incorpora
+restricciones de plausibilidad multivariada mediante distancia de Mahalanobis;
+y (3) evalúa explícitamente la relación entre la ambigüedad y la
+proximidad a fronteras de decisión mediante reducción de dimensionalidad.
+
+Wachter et al.\ \cite{b4} establecieron el marco teórico de las
+explicaciones contrafácticas como mecanismo de XAI sin acceso a los
+internos del modelo. En el ámbito de la cuantificación de incertidumbre,
+Angelopoulos y Bates \cite{b2} proveen una introducción exhaustiva a la
+predicción conforme, mientras que Stutz et al.\ \cite{b1} analizan
+específicamente el problema de la ambigüedad inherente en los conjuntos
+de predicción. Este trabajo conecta formalmente estas dos líneas de
+investigación para datos tabulares.
+
+\subsection{Pregunta de Investigación}
+
+Dada una instancia $X$ tal que su conjunto de predicción bajo nivel de
+confianza $1-\alpha = 0{,}90$ es ambiguo ($|C(X)| > 1$), ¿existe una
+perturbación mínima $\delta$ tal que $X' = X + \delta$ sea morfológicamente
+plausible y satisfaga $|C(X')| = 1$ para una clase objetivo específica $Y_t$?
+
+Esta pregunta motiva un estudio con tres objetivos complementarios y medibles:
+\begin{itemize}
+    \item[$\bullet$] \textbf{O1 --- Interpretabilidad}: determinar, mediante
+    reducción de dimensionalidad (t-SNE, UMAP)\cite{b11,b12}, que las instancias ambiguas
+    del \textit{Dry Bean Dataset} bajo $\alpha = 0{,}10$ se concentran
+    estadísticamente en las fronteras de decisión entre clases,
+    cuantificando la proporción de ambigüedad por región del espacio de
+    características.
+
+    \item[$\bullet$] \textbf{O2 --- Accionabilidad}: lograr una tasa de éxito
+    de resolución conforme $\geq 70\,\%$ sobre las instancias ambiguas del
+    conjunto de evaluación (20\,\% del dataset), definida como la proporción
+    de instancias para las cuales el algoritmo encuentra un contrafáctico
+    $X'$ con $|C(X')| = 1$, $d_M(X', \mathcal{D}) \leq \tau_M$ y
+    $\|X' - X\|_2 \leq \tau_d$.
+
+    \item[$\bullet$] \textbf{O3 --- Comparación de modelos}: establecer si
+    la complejidad del modelo base (Regresión Logística vs.\ XGBoost vs.\
+    MLP) afecta significativamente la tasa de éxito y el costo de resolución,
+    reportando diferencias estadísticamente significativas mediante prueba
+    de Wilcoxon con $p < 0{,}05$.\cite{b13}
+\end{itemize}
+
+La implementación completa del proyecto, incluyendo código, datos
+preprocesados y resultados reproducibles, se encuentra disponible en el repositorio público de GitHub:
+\url{https://github.com/Sofiwiwi/Proyecto-XAI}.
+
+% ─────────────────────────────────────────────
+\section{Método Propuesto}
+
+En esta sección se describe el marco teórico, los datos utilizados, el entorno de experimentación en Kaggle y la arquitectura completa de la solución que integra Predicción Conforme con explicaciones contrafácticas para resolver la ambigüedad en conjuntos de predicción sobre datos tabulares.\footnote{El código y resultados se mantendrán en el repositorio público del proyecto en GitHub, sincronizado con los notebooks de Kaggle.}
+
+\subsection{Marco teórico}
+
+El modelo propuesto integra Predicción Conforme (Conformal Prediction, CP) con explicaciones contrafácticas post--hoc para resolver la ambigüedad en conjuntos de predicción multiclase.
+
+Cuando las fronteras de decisión entre clases se solapan, la CP genera conjuntos ambiguos con $|C(x)|>1$, lo que dificulta la toma de decisiones en dominios críticos donde se requiere una única etiqueta justificable.\cite{b1} En este trabajo se interpreta dicha ambigüedad como un estado de incertidumbre \emph{resoluble} mediante cambios mínimos y plausibles en las características de entrada, lo que motiva el uso de explicaciones contrafácticas como herramienta de XAI local y accionable.\cite{b4,b7}
+
+Las explicaciones contrafácticas responden a la pregunta ``¿qué debería cambiar en esta instancia para obtener una predicción diferente?'', generando un punto $x'$ cercano a $x$ que altera la predicción del modelo.\cite{b4} La contribución central de este modelo consiste en definir una función de pérdida que incorpora explícitamente el umbral conforme $q_\alpha$ y que busca contrafácticos $x'$ tales que el conjunto de predicción colapse a un singleton $C(x') = \{y_t\}$, garantizando así una decisión única, estadísticamente respaldada y acompañada de una explicación interpretable.\cite{b1,b6}
+
+\subsection{Datos: Dry Bean Dataset}
+\label{sec:datos}
+
+Se utilizará el \textit{Dry Bean Dataset}, disponible en el repositorio
+UCI Machine Learning Repository.\cite{b5} Contiene 13\,611 instancias
+de siete variedades de frijol seco (\textit{Seker, Barbunya, Bombay, Cali, Dermason, Horoz} y \textit{Sira}), descritas mediante 16 características morfológicas continuas (área, perímetro, ejes mayor y menor, entre otras) obtenidas mediante visión por computadora. El dataset es público, no requiere licencia especial y está libre de valores faltantes.
+
+Este conjunto de datos es especialmente adecuado para estudiar ambigüedad conforme por dos razones técnicas. Primero, varias clases presentan alto solapamiento en el espacio de características; en particular, \textit{Dermason} y \textit{Sira} comparten rangos similares en varios ejes morfológicos, generando fronteras de decisión difusas que producen naturalmente conjuntos de predicción con $|C(x)|>1$. Segundo, las 16 características exhiben fuertes correlaciones geométricas (por ejemplo, área y perímetro), lo que justifica el uso de restricciones multivariadas para garantizar plausibilidad.
+
+El preprocesamiento consistirá en una estandarización ($\mu=0$, $\sigma=1$) de las características y en la partición del dataset en tres subconjuntos disjuntos: entrenamiento (60\,\%), calibración (20\,\%) y evaluación (20\,\%). Dado el leve desbalanceo de clases, se reportarán métricas macro--promediadas además de las globales.\cite{b5}
+
+\subsection{Entorno de experimentación en Kaggle}
+
+Toda la implementación se realizará en la plataforma Kaggle, utilizando \textit{notebooks} como entorno principal de desarrollo y experimentación. Kaggle proporciona acceso a recursos de cómputo (CPU y, cuando sea necesario, GPU) y a un entorno de Python preconfigurado con librerías como \texttt{scikit-learn}, \texttt{xgboost} y herramientas para visualización, lo que facilita el desarrollo reproducible del pipeline propuesto.
+
+El flujo de trabajo considera un \textit{notebook} principal que orquesta la carga del \textit{Dry Bean Dataset}, el preprocesamiento, el entrenamiento de los modelos base, la construcción de los conjuntos conformes y la generación de explicaciones contrafácticas. El código se organizará en módulos (por ejemplo, \texttt{models.py}, \texttt{conformal.py}, \texttt{counterfactuals.py}) que se importan en el notebook, manteniendo así una separación clara entre lógica de experimentación y lógica de implementación. Estos módulos se versionarán en un repositorio público de GitHub, de modo que los experimentos ejecutados en Kaggle sean fácilmente reproducibles desde otros entornos.
+
+\subsection{Arquitectura general de la solución}
+
+El modelo propuesto se apoya en una arquitectura comparativa con tres clasificadores base: Regresión Logística, XGBoost y una Red Neuronal Multicapa (MLP). La Regresión Logística actúa como línea base interpretable, mientras que XGBoost y MLP representan modelos de caja negra con distinta capacidad de generalización, lo que permite estudiar cómo la complejidad del modelo afecta la ambigüedad conforme y la factibilidad de resolverla mediante contrafácticos (objetivo O3).
+
+Para cada modelo base se aplica Predicción Conforme dividida (\textit{split conformal prediction}). A partir del conjunto de calibración se calcula un cuantil empírico $q_\alpha$ sobre un puntaje de no conformidad $s(x,y)$ definido a partir de las probabilidades de clase; este cuantil se utiliza luego para construir, en el conjunto de evaluación, conjuntos de predicción $C(x)$ con nivel de confianza $1-\alpha = 0{,}90$. Las instancias ambiguas se identifican como aquellas para las que $|C(x)|>1$, ya que en ellas múltiples clases son estadísticamente consistentes con la entrada.
+
+De forma resumida, el pipeline de la solución es el siguiente:
+\begin{enumerate}
+    \item Cargar y preprocesar el \textit{Dry Bean Dataset} (estandarización y particionado).
+    \item Entrenar los modelos base (Regresión Logística, XGBoost, MLP).
+    \item Calcular el cuantil conforme $q_\alpha$ a partir del conjunto de calibración para cada modelo.
+    \item Construir los conjuntos de predicción $C(x)$ en el conjunto de evaluación e identificar las instancias ambiguas con $|C(x)|>1$.
+    \item Para cada instancia ambigua, resolver un problema de optimización contrafáctica para encontrar un $x'$ plausible con $|C(x')|=1$.
+    \item Evaluar la tasa de éxito, el costo de resolución y la plausibilidad de los contrafácticos generados.
+\end{enumerate}
+
+\subsection{Predicción Conforme dividida}
+
+Se utiliza Predicción Conforme dividida para clasificación. Dado un conjunto de calibración $\{(x_i,y_i)\}_{i=1}^n$ y un puntaje de no conformidad
+$s(x,y) = 1 - \hat{p}(y\mid x)$, se define el cuantil empírico:
+\begin{equation}
+    q_{\alpha} = Q\!\left(\{s(x_i, y_i)\}_{i=1}^{n};
+    \frac{\lceil (1-\alpha)(n+1) \rceil}{n}\right),
+\end{equation}\cite{b2,b3}
+donde $Q(\cdot; p)$ denota el cuantil de nivel $p$ y se utilizará
+$\alpha = 0{,}10$ (cobertura marginal del 90\,\%) en todos los experimentos.
+
+El conjunto de predicción para una nueva instancia se construye como:
+\begin{equation}
+    C(x) = \{y : s(x, y) \leq q_{\alpha}\}.
+\end{equation}
+Bajo el supuesto de intercambiabilidad, se garantiza la cobertura marginal
+$P\!\left(Y \in C(X)\right) \geq 1 - \alpha$.\cite{b2} Las instancias ambiguas se definen como aquellas para las cuales $|C(x)| > 1$, indicando que múltiples clases son estadísticamente consistentes con la entrada $x$.\cite{b1}
+
+\subsection{Formulación de la optimización contrafáctica}
+
+La resolución de la ambigüedad se plantea como un problema de optimización restringida, en el que se busca una perturbación mínima $x'$ de una instancia ambigua $x$ que cumpla simultáneamente dos criterios: (i) que el conjunto de predicción conforme colapse a un singleton con la clase objetivo $y_t$, y (ii) que el punto contrafáctico sea morfológicamente plausible respecto de la distribución de entrenamiento.\cite{b4,b6}
+
+Para ello se define una función de pérdida compuesta:
+\begin{equation}
+    \mathcal{L}(x,x') = \lambda \left(\|x'-x\|_1 + \|x'-x\|_2\right)
+    + \mathcal{L}_{\mathrm{conf}}(x', y_t, q_\alpha)
+    + \gamma \, d_M(x', \mathcal{D}),
+\end{equation}
+donde:
+\begin{itemize}
+    \item $\|x'-x\|_1 + \|x'-x\|_2$ combina normas para promover escasez de cambios y suavidad simultáneamente; $\lambda>0$ pondera esta regularización.\cite{b4}
+    \item $\mathcal{L}_{\mathrm{conf}}$ es una penalización tipo \textit{hinge} sobre los puntajes de no conformidad:
+    \begin{align}
+        \mathcal{L}_{\mathrm{conf}}(x', y_t, q_\alpha)
+        &= \max\bigl(0,\, s(x', y_t) - q_\alpha\bigr) \nonumber\\
+        &\quad + \sum_{j \neq t} \max\bigl(0,\, q_\alpha - s(x', y_j)\bigr),
+    \end{align}
+    de modo que se fuerza la inclusión de $y_t$ en $C(x')$ y la exclusión del resto de las clases.\cite{b1}
+    \item $d_M(x', \mathcal{D})$ es la distancia de Mahalanobis de $x'$ respecto a la distribución de entrenamiento $\mathcal{D}$, y $\gamma>0$ pondera la restricción de plausibilidad.
+\end{itemize}
+
+La optimización se realiza mediante un algoritmo iterativo (por ejemplo, descenso de gradiente o un método cuasi--Newton) sobre $x'$, con hiperparámetros que controlan el peso relativo de cada término en la pérdida.\cite{b4,b6} En la práctica, el procedimiento se ejecuta sobre lotes de instancias ambiguas, lo que permite medir la tasa de éxito en resolver la ambigüedad, el costo de la perturbación y la preservación de plausibilidad.
+
+\subsection{Plausibilidad y coherencia multivariada}
+
+Para garantizar que los contrafácticos generados sean morfológicamente posibles ---es decir, que correspondan a frijoles reales--- no es suficiente restringir cada característica a su rango univariado observado. Las 16 características del dataset exhiben fuertes correlaciones estructurales (por ejemplo, el área crece aproximadamente de forma cuadrática con los ejes principales), por lo que una perturbación que viole estas relaciones produciría instancias físicamente incoherentes.
+
+Se incorpora la distancia de Mahalanobis $d_M(x', \mathcal{D})$ como restricción suave en la función de pérdida, donde $\mathcal{D}$ representa la distribución empírica de los datos de entrenamiento, caracterizada por su media $\mu$ y matriz de covarianza $\Sigma$:
+\begin{equation}
+    d_M(x', \mathcal{D}) = \sqrt{(x' - \mu)^\top \Sigma^{-1} (x' - \mu)}.
+\end{equation}
+Un valor bajo de $d_M$ indica que $x'$ es coherente con la variabilidad multivariada de los datos originales; en los experimentos se analizará la distribución de $d_M$ antes y después de la generación de contrafácticos para verificar que la plausibilidad se mantiene dentro de rangos razonables.\cite{b10}
+
+% ─────────────────────────────────────────────
+\section{Plan de Evaluación}
+
+\subsection{Métricas de Rendimiento}
+
+El enfoque propuesto será evaluado mediante las siguientes métricas:
+\begin{itemize}
+    \item[$\bullet$] \textbf{Tasa de éxito (Validez Conforme)}: proporción
+    de instancias ambiguas para las cuales se encontró un contrafáctico
+    $X'$ con $|C(X')| = 1$ (umbral objetivo: $\geq 70\,\%$).
+
+    \item[$\bullet$] \textbf{Costo de resolución}: magnitud de la
+    perturbación necesaria, medida en normas $L_1$ y $L_2$.
+
+    \item[$\bullet$] \textbf{Preservación de plausibilidad}: distancia de
+    Mahalanobis promedio de los contrafácticos respecto a la distribución
+    de entrenamiento.
+
+    \item[$\bullet$] \textbf{Reducción del conjunto de predicción}: cambio
+    en $|C(X)|$ antes y después de la perturbación.
+
+    \item[$\bullet$] \textbf{Análisis de fronteras de decisión}:
+    visualización de las regiones de ambigüedad conforme mediante reducción
+    de dimensionalidad con t-SNE y UMAP, para verificar que los
+    contrafácticos efectivamente cruzan hacia regiones no ambiguas.\cite{b11,b12}
+\end{itemize}
+
+\subsection{Fidelidad de las Explicaciones}
+
+Adicionalmente, y en conformidad con los requerimientos de la entrega final,
+se evaluará la fidelidad de las explicaciones contrafácticas generadas. La
+fidelidad mide si las atribuciones producidas por el método XAI reflejan
+fielmente el comportamiento interno del modelo, y no son simplemente
+convincentes superficialmente \cite{b8}. Para esto se calculará al menos
+una de las siguientes métricas, disponibles en la librería \texttt{Quantus}:
+\begin{itemize}
+    \item[$\bullet$] \textbf{Faithfulness Correlation} \cite{b8}: mide la
+    correlación entre la importancia atribuida a cada característica y el
+    cambio efectivo en la predicción al perturbarla.
+    \item[$\bullet$] \textbf{Faithfulness Estimate} \cite{b9}: evalúa si
+    las características identificadas como importantes son realmente
+    necesarias para la predicción.
+\end{itemize}
+
+Se reportará el valor obtenido y se interpretará en el contexto del
+problema, discutiendo las limitaciones de la métrica considerando que
+la literatura reciente indica que estas son más confiables para modelos
+lineales que para modelos no lineales como las redes neuronales \cite{b10}.
+
+\subsection{Comparación entre Modelos}
+
+Se comparará el rendimiento del marco propuesto entre los tres clasificadores
+base (XGBoost, MLP y Regresión Logística), reportando para cada uno la tasa
+de éxito, el costo de resolución promedio y la plausibilidad de los
+contrafácticos generados. Las diferencias se evaluarán con prueba de Wilcoxon
+con nivel de significancia $p < 0{,}05$.\cite{b13}
+
+\subsection{Factibilidad Computacional}
+
+El proyecto es factible dentro del semestre: el Dry Bean Dataset es de
+acceso libre \cite{b5}; la predicción conforme dividida está implementada
+en la librería \texttt{MAPIE}; los contrafácticos para datos tabulares
+están disponibles en \texttt{DiCE-ML}; XGBoost y MLP (vía
+\texttt{scikit-learn}) son computacionalmente ligeros; y las métricas de
+fidelidad están disponibles en \texttt{Quantus}. Todo el pipeline puede
+ejecutarse en CPU estándar sin infraestructura especializada, y el código
+será mantenido en el repositorio de GitHub del proyecto.
+
+% ─────────────────────────────────────────────
+\begin{thebibliography}{00}
+
+\bibitem{b1} D. Stutz, A. G. Roy, T. Matejovicova, P. Strachan,
+A. T. Cemgil, y A. Doucet, ``Conformal prediction under ambiguous
+ground truth,'' \textit{arXiv preprint} arXiv:2307.09302, 2023.
+
+\bibitem{b2} A. N. Angelopoulos y S. Bates, ``A gentle introduction to
+conformal prediction and distribution-free uncertainty quantification,''
+\textit{arXiv}:2107.07511 [cs.LG], 2022.
+
+\bibitem{b3} R. Tibshirani, ``Conformal prediction,'' Notas de clase,
+University of California Berkeley, 2023.
+
+\bibitem{b4} S. Wachter, B. Mittelstadt, y C. Russell,
+``Counterfactual explanations without opening the black box,''
+\textit{Harvard Journal of Law \& Technology}, vol.~31, no.~2, 2018.
+
+\bibitem{b5} M. Koklu e I. A. Ozkan, ``Multiclass classification of
+dry beans using computer vision and machine learning techniques,''
+\textit{Computers and Electronics in Agriculture}, vol.~174,
+p.~105507, 2020.
+
+\bibitem{b6} R. Maalej, R. Confalonieri, y M. Lippi,
+``Counterfactual explanations for conformal prediction sets,''
+in \textit{Proc. PMLR}, vol.~266, 2025.
+
+\bibitem{b7} C. Molnar, \textit{Interpretable Machine Learning: A Guide
+for Making Black Box Models Explainable}, 2nd ed., 2022. [En línea].
+Disponible: \url{https://christophm.github.io/interpretable-ml-book/}
+
+\bibitem{b8} U. Bhatt, A. Weller, y J. M. Moura, ``Evaluating and
+aggregating feature-based model explanations,'' in \textit{Proc. 29th
+Int. Joint Conf. Artificial Intelligence (IJCAI)}, 2021.
+
+\bibitem{b9} D. Alvarez-Melis y T. S. Jaakkola, ``On the robustness of
+interpretability methods,'' \textit{arXiv preprint} arXiv:1806.08049,
+2018.
+
+\bibitem{b10} M. Miró-Nicolau, A. Jaume-i-Capó, y G. Moyà-Alcover,
+``A comprehensive study on fidelity metrics for XAI,''
+\textit{Information Processing \& Management}, 2025.
+
+\bibitem{b11} L. van der Maaten and G. Hinton, ``Visualizing data using t-SNE,''
+\textit{Journal of Machine Learning Research}, vol.~9, pp.~2579--2605, 2008.
+
+\bibitem{b12} L. McInnes, J. Healy, and J. Melville, ``UMAP: Uniform Manifold
+Approximation and Projection for Dimension Reduction,'' \textit{arXiv preprint}
+arXiv:1802.03426, 2018.
+
+\bibitem{b13} F. Wilcoxon, ``Individual comparisons by ranking methods,''
+\textit{Biometrics Bulletin}, vol.~1, no.~6, pp.~80--83, 1945.
+
+\end{thebibliography}
+
+\end{document}

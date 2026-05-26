@@ -121,9 +121,12 @@ incertidumbre \textit{resoluble} mediante perturbaciones contrafácticas
 (por instancia), que responde a la pregunta: ``¿qué cambios mínimos en las
 características de entrada provocarían un resultado diferente?'' \cite{b4,b7}.
 La contribución principal es la formalización de un proceso de búsqueda
-que garantiza que el nuevo punto $X'$ no solo cambie la clase predicha, sino
-que colapse el conjunto de predicción a un singleton $\{Y_t\}$,
-proporcionando una decisión única y estadísticamente respaldada.
+que busca colapsar el conjunto de predicción a un singleton $\{Y_t\}$
+en el punto contrafáctico $X'$. Si bien este punto optimizado pierde las
+garantías formales de cobertura marginal del split conformal tradicional
+debido a la pérdida de intercambiabilidad, dicho colapso actúa como una
+guía heurística de certidumbre local del modelo, promoviendo decisiones
+contrafácticas con baja ambigüedad percibida.
 
 \subsection{Contexto de los Datos}
 
@@ -205,7 +208,7 @@ El modelo propuesto integra Predicción Conforme (Conformal Prediction, CP) con 
 
 Cuando las fronteras de decisión entre clases se solapan, la CP genera conjuntos ambiguos con $|C(x)|>1$, lo que dificulta la toma de decisiones en dominios críticos donde se requiere una única etiqueta justificable.\cite{b1} En este trabajo se interpreta dicha ambigüedad como un estado de incertidumbre \emph{resoluble} mediante cambios mínimos y plausibles en las características de entrada, lo que motiva el uso de explicaciones contrafácticas como herramienta de XAI local y accionable.\cite{b4,b7}
 
-Las explicaciones contrafácticas responden a la pregunta ``¿qué debería cambiar en esta instancia para obtener una predicción diferente?'', generando un punto $x'$ cercano a $x$ que altera la predicción del modelo.\cite{b4} La contribución central de este modelo consiste en definir una función de pérdida que incorpora explícitamente el umbral conforme $q_\alpha$ y que busca contrafácticos $x'$ tales que el conjunto de predicción colapse a un singleton $C(x') = \{y_t\}$, garantizando así una decisión única, estadísticamente respaldada y acompañada de una explicación interpretable.\cite{b1,b6}
+Las explicaciones contrafácticas responden a la pregunta ``¿qué debería cambiar en esta instancia para obtener una predicción diferente?'', generando un punto $x'$ cercano a $x$ que altera la predicción del modelo.\cite{b4} La contribución central de este modelo consiste en definir una función de pérdida que incorpora explícitamente el umbral conforme $q_\alpha$ y que busca contrafácticos $x'$ tales que el conjunto de predicción colapse a un singleton $C(x') = \{y_t\}$, proporcionando una etiqueta única y una explicación interpretable que sirve como guía heurística de certidumbre local del modelo base en el punto modificado, aun cuando las garantías estadísticas globales no se preserven en la instancia optimizada.\cite{b1,b6}
 
 \subsection{Datos: Dry Bean Dataset}
 \label{sec:datos}
@@ -281,6 +284,17 @@ donde:
     \item $d_M(x', \mathcal{D}_{y_t})$ es la distancia de Mahalanobis condicional de $x'$ respecto a la distribución de la clase objetivo $y_t$ ($\mathcal{D}_{y_t}$), y $\gamma>0$ pondera la restricción de plausibilidad.
 \end{itemize}
 
+Es importante destacar una limitación teórica fundamental de esta formulación:
+al optimizar activamente $x'$ para minimizar $\mathcal{L}(x, x')$ y forzar
+$C(x') = \{y_t\}$, se rompe el supuesto de intercambiabilidad (\textit{exchangeability})
+requerido por la Predicción Conforme. Dado que $x'$ es una instancia sintética
+sometida a un sesgo de selección mediante optimización, el conjunto $C(x')$
+carece de la garantía matemática de cobertura marginal del split conformal.
+Por lo tanto, el colapso del conjunto conforme debe interpretarse no como
+una garantía estadística sobre el contrafáctico, sino como un criterio local
+de optimización diseñado para orientar la búsqueda hacia regiones donde el
+modelo base exhibe alta confianza y baja ambigüedad respecto a la clase objetivo.
+
 La estrategia de optimización se adapta según la naturaleza matemática del clasificador base. Para modelos continuos y derivables (Regresión Logística y MLP), el problema se resuelve directamente mediante optimización basada en gradiente (como descenso de gradiente proyectado o algoritmos cuasi-Newton tipo L-BFGS-B) sobre $x'$, utilizando los hiperparámetros de penalización para ponderar los términos de la pérdida.\cite{b4,b6} Por el contrario, los modelos basados en árboles de decisión (como XGBoost) generan funciones de decisión constantes por trozos, lo que implica que el gradiente respecto a la entrada es nulo en casi todo el dominio e indefinido en las fronteras de división. Para sortear esta limitación de no-diferenciabilidad, el pipeline emplea optimizadores libres de gradiente (tales como algoritmos genéticos o de búsqueda aleatoria local en el espacio de vecindad), los cuales se implementan mediante la interfaz agnóstica al modelo de la librería \texttt{DiCE-ML}. En la práctica, el procedimiento se ejecuta sobre lotes de instancias ambiguas, lo que permite medir la tasa de éxito, el costo de la perturbación y la preservación de la plausibilidad del contrafáctico resultante.
 
 \subsection{Plausibilidad y coherencia multivariada}
@@ -300,7 +314,7 @@ Un valor bajo de $d_M$ indica que $x'$ es coherente con la morfología y variabi
 
 El enfoque propuesto será evaluado mediante las siguientes métricas:
 \begin{itemize}
-    \item[$\bullet$] \textbf{Tasa de éxito (Validez Conforme)}: proporción
+    \item[$\bullet$] \textbf{Tasa de éxito (Resolución Conforme)}: proporción
     de instancias ambiguas para las cuales se encontró un contrafáctico
     $X'$ con $|C(X')| = 1$ (umbral objetivo: $\geq 70\,\%$).
 

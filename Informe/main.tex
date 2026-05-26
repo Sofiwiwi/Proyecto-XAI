@@ -61,7 +61,7 @@ $q_\alpha$, buscando perturbaciones mínimas $X'$ tales que el puntaje
 de no conformidad satisfaga estrictamente la condición de unicidad del
 conjunto de predicción. Adicionalmente, se garantiza la plausibilidad
 morfológica de los contrafácticos mediante restricciones de coherencia
-multivariada basadas en distancia de Mahalanobis. El enfoque se evalúa
+multivariada basadas en distancia de Mahalanobis condicional por clase. El enfoque se evalúa
 sobre el \textit{Dry Bean Dataset}, un conjunto de datos tabular con
 alto solapamiento inter-clase, especialmente adecuado para generar
 instancias conformemente ambiguas. Se hipotetiza que la ambigüedad
@@ -74,7 +74,7 @@ clasificadores conformes con nivel de confianza $1 - \alpha = 0{,}90$.
 \begin{IEEEkeywords}
 predicción conforme, explicaciones contrafácticas, cuantificación de
 incertidumbre, inteligencia artificial explicable, optimización restringida,
-clasificación tabular, distancia de Mahalanobis.
+clasificación tabular, distancia de Mahalanobis condicional.
 \end{IEEEkeywords}
 
 % ─────────────────────────────────────────────
@@ -150,7 +150,7 @@ contrafácticas específicamente diseñadas para conjuntos de predicción
 conformes, demostrando la viabilidad del enfoque en datos de texto. Este
 trabajo se diferencia en tres aspectos: (1) se enfoca en datos tabulares
 con características morfológicas correlacionadas; (2) incorpora
-restricciones de plausibilidad multivariada mediante distancia de Mahalanobis;
+restricciones de plausibilidad multivariada mediante distancia de Mahalanobis condicional por clase;
 y (3) evalúa explícitamente la relación entre la ambigüedad y la
 proximidad a fronteras de decisión mediante reducción de dimensionalidad.
 
@@ -183,7 +183,7 @@ Esta pregunta motiva un estudio con tres objetivos complementarios y medibles:
     de resolución conforme $\geq 70\,\%$ sobre las instancias ambiguas del
     conjunto de evaluación (20\,\% del dataset), definida como la proporción
     de instancias para las cuales el algoritmo encuentra un contrafáctico
-    $X'$ con $|C(X')| = 1$, $d_M(X', \mathcal{D}) \leq \tau_M$ y
+    $X'$ con $|C(X')| = 1$, $d_M(X', \mathcal{D}_{Y_t}) \leq \tau_M$ y
     $\|X' - X\|_2 \leq \tau_d$.
 
     \item[$\bullet$] \textbf{O3 --- Comparación de modelos}: establecer si
@@ -269,7 +269,7 @@ Para ello se define una función de pérdida compuesta:
 \begin{equation}
     \mathcal{L}(x,x') = \lambda \left(\|x'-x\|_1 + \|x'-x\|_2\right)
     + \mathcal{L}_{\mathrm{conf}}(x', y_t, q_\alpha)
-    + \gamma \, d_M(x', \mathcal{D}),
+    + \gamma \, d_M(x', \mathcal{D}_{y_t}),
 \end{equation}
 donde:
 \begin{itemize}
@@ -281,7 +281,7 @@ donde:
         &\quad + \sum_{j \neq t} \max\bigl(0,\, q_\alpha - s(x', y_j)\bigr),
     \end{align}
     de modo que se fuerza la inclusión de $y_t$ en $C(x')$ y la exclusión del resto de las clases.\cite{b1}
-    \item $d_M(x', \mathcal{D})$ es la distancia de Mahalanobis de $x'$ respecto a la distribución de entrenamiento $\mathcal{D}$, y $\gamma>0$ pondera la restricción de plausibilidad.
+    \item $d_M(x', \mathcal{D}_{y_t})$ es la distancia de Mahalanobis condicional de $x'$ respecto a la distribución de la clase objetivo $y_t$ ($\mathcal{D}_{y_t}$), y $\gamma>0$ pondera la restricción de plausibilidad.
 \end{itemize}
 
 Es importante destacar una limitación teórica fundamental de esta formulación:
@@ -295,17 +295,17 @@ una garantía estadística sobre el contrafáctico, sino como un criterio local
 de optimización diseñado para orientar la búsqueda hacia regiones donde el
 modelo base exhibe alta confianza y baja ambigüedad respecto a la clase objetivo.
 
-La optimización se realiza mediante un algoritmo iterativo (por ejemplo, descenso de gradiente o un método cuasi--Newton) sobre $x'$, con hiperparámetros que controlan el peso relativo de cada término en la pérdida.\cite{b4,b6} En la práctica, el procedimiento se ejecuta sobre lotes de instancias ambiguas, lo que permite medir la tasa de éxito en resolver la ambigüedad, el costo de la perturbación y la preservación de plausibilidad.
+La estrategia de optimización se adapta según la naturaleza matemática del clasificador base. Para modelos continuos y derivables (Regresión Logística y MLP), el problema se resuelve directamente mediante optimización basada en gradiente (como descenso de gradiente proyectado o algoritmos cuasi-Newton tipo L-BFGS-B) sobre $x'$, utilizando los hiperparámetros de penalización para ponderar los términos de la pérdida.\cite{b4,b6} Por el contrario, los modelos basados en árboles de decisión (como XGBoost) generan funciones de decisión constantes por trozos, lo que implica que el gradiente respecto a la entrada es nulo en casi todo el dominio e indefinido en las fronteras de división. Para sortear esta limitación de no-diferenciabilidad, el pipeline emplea optimizadores libres de gradiente (tales como algoritmos genéticos o de búsqueda aleatoria local en el espacio de vecindad), los cuales se implementan mediante la interfaz agnóstica al modelo de la librería \texttt{DiCE-ML}. En la práctica, el procedimiento se ejecuta sobre lotes de instancias ambiguas, lo que permite medir la tasa de éxito, el costo de la perturbación y la preservación de la plausibilidad del contrafáctico resultante.
 
 \subsection{Plausibilidad y coherencia multivariada}
 
 Para garantizar que los contrafácticos generados sean morfológicamente posibles ---es decir, que correspondan a frijoles reales--- no es suficiente restringir cada característica a su rango univariado observado. Las 16 características del dataset exhiben fuertes correlaciones estructurales (por ejemplo, el área crece aproximadamente de forma cuadrática con los ejes principales), por lo que una perturbación que viole estas relaciones produciría instancias físicamente incoherentes.
 
-Se incorpora la distancia de Mahalanobis $d_M(x', \mathcal{D})$ como restricción suave en la función de pérdida, donde $\mathcal{D}$ representa la distribución empírica de los datos de entrenamiento, caracterizada por su media $\mu$ y matriz de covarianza $\Sigma$:
+Se incorpora la distancia de Mahalanobis condicional $d_M(x', \mathcal{D}_{y_t})$ como restricción suave en la función de pérdida, donde $\mathcal{D}_{y_t}$ representa la distribución empírica de los datos de entrenamiento correspondientes a la clase objetivo $y_t$, caracterizada por su media $\mu_{y_t}$ y su matriz de covarianza $\Sigma_{y_t}$:
 \begin{equation}
-    d_M(x', \mathcal{D}) = \sqrt{(x' - \mu)^\top \Sigma^{-1} (x' - \mu)}.
+    d_M(x', \mathcal{D}_{y_t}) = \sqrt{(x' - \mu_{y_t})^\top \Sigma_{y_t}^{-1} (x' - \mu_{y_t})}.
 \end{equation}
-Un valor bajo de $d_M$ indica que $x'$ es coherente con la variabilidad multivariada de los datos originales; en los experimentos se analizará la distribución de $d_M$ antes y después de la generación de contrafácticos para verificar que la plausibilidad se mantiene dentro de rangos razonables.\cite{b10}
+Un valor bajo de $d_M$ indica que $x'$ es coherente con la morfología y variabilidad multivariada de la clase objetivo $y_t$ a la que se aspira transicionar. El uso de la métrica condicionada por clase evita penalizar contrafácticos plausibles que se alejan de la media global debido a la heterogeneidad física entre clases (por ejemplo, entre frijoles de tamaño extremo como \textit{Bombay} y \textit{Dermason}). En los experimentos se analizará la distribución de esta distancia condicional para verificar que la plausibilidad de los contrafácticos se mantiene dentro de los rangos característicos de la clase objetivo.\cite{b10}
 
 % ─────────────────────────────────────────────
 \section{Plan de Evaluación}
@@ -322,8 +322,8 @@ El enfoque propuesto será evaluado mediante las siguientes métricas:
     perturbación necesaria, medida en normas $L_1$ y $L_2$.
 
     \item[$\bullet$] \textbf{Preservación de plausibilidad}: distancia de
-    Mahalanobis promedio de los contrafácticos respecto a la distribución
-    de entrenamiento.
+    Mahalanobis condicional promedio de los contrafácticos respecto a la
+    distribución de la clase objetivo.
 
     \item[$\bullet$] \textbf{Reducción del conjunto de predicción}: cambio
     en $|C(X)|$ antes y después de la perturbación.
@@ -334,27 +334,15 @@ El enfoque propuesto será evaluado mediante las siguientes métricas:
     contrafácticos efectivamente cruzan hacia regiones no ambiguas.\cite{b11,b12}
 \end{itemize}
 
-\subsection{Fidelidad de las Explicaciones}
+\subsection{Evaluación de Explicaciones Contrafácticas}
 
-Adicionalmente, y en conformidad con los requerimientos de la entrega final,
-se evaluará la fidelidad de las explicaciones contrafácticas generadas. La
-fidelidad mide si las atribuciones producidas por el método XAI reflejan
-fielmente el comportamiento interno del modelo, y no son simplemente
-convincentes superficialmente \cite{b8}. Para esto se calculará al menos
-una de las siguientes métricas, disponibles en la librería \texttt{Quantus}:
+Para evaluar la calidad de las explicaciones contrafácticas generadas, se definirá un conjunto de métricas nativas y teóricamente consistentes para métodos basados en ejemplos, en reemplazo de las métricas de fidelidad de atribución (tales como las de la librería \texttt{Quantus}) que asumen vectores de importancia y resultan conceptualmente incompatibles en este contexto. Se medirán las siguientes dimensiones:
 \begin{itemize}
-    \item[$\bullet$] \textbf{Faithfulness Correlation} \cite{b8}: mide la
-    correlación entre la importancia atribuida a cada característica y el
-    cambio efectivo en la predicción al perturbarla.
-    \item[$\bullet$] \textbf{Faithfulness Estimate} \cite{b9}: evalúa si
-    las características identificadas como importantes son realmente
-    necesarias para la predicción.
+    \item[$\bullet$] \textbf{Escasez (Sparsity)} \cite{b8}: mide la cantidad de características que sufrieron cambios en el contrafáctico respecto a la instancia original: $S(x, x') = \sum_{j=1}^d \mathbb{I}(x_j \neq x'_j)$. Se persigue una alta escasez (pocos cambios) para maximizar la interpretabilidad humana de la explicación.
+    \item[$\bullet$] \textbf{Proximidad (Proximity)} \cite{b4, b9}: cuantifica la distancia media entre el contrafáctico y la instancia de origen sobre las características modificadas, calculada como la distancia Manhattan ($L_1$) o Euclidiana ($L_2$) normalizada por la desviación estándar de cada variable en el conjunto de entrenamiento.
+    \item[$\bullet$] \textbf{Plausibilidad (Plausibility)} \cite{b10}: evaluada cuantitativamente a través de la distancia de Mahalanobis condicional $d_M(x', \mathcal{D}_{y_t})$ respecto a la distribución de la clase objetivo, garantizando que el punto generado sea físicamente consistente.
+    \item[$\bullet$] \textbf{Accionabilidad (Actionability)}: análisis cualitativo y de diseño experimental que asegura que las variables morfológicas modificables correspondan a propiedades físicas realistas del frijol (evitando cambios incoherentes) y clasifica las transiciones propuestas según su viabilidad.
 \end{itemize}
-
-Se reportará el valor obtenido y se interpretará en el contexto del
-problema, discutiendo las limitaciones de la métrica considerando que
-la literatura reciente indica que estas son más confiables para modelos
-lineales que para modelos no lineales como las redes neuronales \cite{b10}.
 
 \subsection{Comparación entre Modelos}
 
@@ -371,7 +359,7 @@ acceso libre \cite{b5}; la predicción conforme dividida está implementada
 en la librería \texttt{MAPIE}; los contrafácticos para datos tabulares
 están disponibles en \texttt{DiCE-ML}; XGBoost y MLP (vía
 \texttt{scikit-learn}) son computacionalmente ligeros; y las métricas de
-fidelidad están disponibles en \texttt{Quantus}. Todo el pipeline puede
+evaluación de contrafácticos serán calculadas de forma nativa mediante \texttt{NumPy} y \texttt{SciPy}. Todo el pipeline puede
 ejecutarse en CPU estándar sin infraestructura especializada, y el código
 será mantenido en el repositorio de GitHub del proyecto.
 
@@ -406,17 +394,19 @@ in \textit{Proc. PMLR}, vol.~266, 2025.
 for Making Black Box Models Explainable}, 2nd ed., 2022. [En línea].
 Disponible: \url{https://christophm.github.io/interpretable-ml-book/}
 
-\bibitem{b8} U. Bhatt, A. Weller, y J. M. Moura, ``Evaluating and
-aggregating feature-based model explanations,'' in \textit{Proc. 29th
-Int. Joint Conf. Artificial Intelligence (IJCAI)}, 2021.
+\bibitem{b8} R. Guidotti, ``Counterfactual explanations and adversarial
+examples: Common grounds, mysteries, and perspectives,''
+\textit{Frontiers in Computer Science}, vol.~3, p.~611244, 2021.
 
-\bibitem{b9} D. Alvarez-Melis y T. S. Jaakkola, ``On the robustness of
-interpretability methods,'' \textit{arXiv preprint} arXiv:1806.08049,
-2018.
+\bibitem{b9} A.-H. Karimi, G. Barthe, B. Schölkopf, e I. Valera,
+``A survey of algorithmic recourse: definitions, formulations, state of
+the art, and future directions,'' \textit{ACM SIGKDD Explorations
+Newsletter}, vol.~24, no.~1, pp.~46--88, 2022.
 
-\bibitem{b10} M. Miró-Nicolau, A. Jaume-i-Capó, y G. Moyà-Alcover,
-``A comprehensive study on fidelity metrics for XAI,''
-\textit{Information Processing \& Management}, 2025.
+\bibitem{b10} M. T. Keane y B. Smyth, ``Good counterfactuals and where to
+find them: A case-based technique for generating explanations for
+black-box models,'' in \textit{Proc. Case-Based Reasoning Research and
+Development}, pp.~163--178, 2020.
 
 \bibitem{b11} L. van der Maaten and G. Hinton, ``Visualizing data using t-SNE,''
 \textit{Journal of Machine Learning Research}, vol.~9, pp.~2579--2605, 2008.

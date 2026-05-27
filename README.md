@@ -4,4 +4,4 @@ La idea principal consiste en detectar instancias ambiguas —aquellas donde el 
 
 El estudio se desarrolla utilizando el Dry Bean Dataset del repositorio UCI Machine Learning Repository.
 
-[Ver notebook en Kaggle](https://www.kaggle.com/code/sofiwiwi/proyecto-xai)
+[Ver notebook en Kaggle](https://www.kaggle.com/code/gonzalomichea22/xai-proyecto)

@@ -47,7 +47,32 @@ marco.repetto@usm.cl}
 \maketitle
 
 \begin{abstract}
-La predicción conforme (PC) ofrece un marco estadístico robusto para la cuantificación de incertidumbre, garantizando cobertura marginal formal bajo el único supuesto de intercambiabilidad de los datos. Sin embargo, la aparición de conjuntos de predicción ambiguos ($|C(X)| > 1$) limita su aplicabilidad en sistemas críticos de toma de decisiones, como el diagnóstico clínico o la evaluación de riesgo crediticio, donde se requiere una decisión única y justificable. Este artículo propone un marco metodológico que integra la PC con la Inteligencia Artificial Explicable (XAI) mediante explicaciones contrafácticas optimizadas, un método post-hoc agnóstico al modelo que genera perturbaciones mínimas e interpretables sobre las características de entrada. A diferencia de enfoques anteriores, se define una función de pérdida compuesta $\mathcal{L}(X, X')$ que incorpora explícitamente el umbral conforme $q_\alpha$, buscando perturbaciones mínimas $X'$ tales que el puntaje de no conformidad satisfaga estrictamente la condición de unicidad del conjunto de predicción. Adicionalmente, se garantiza la plausibilidad morfológica de los contrafácticos mediante restricciones de coherencia multivariada basadas en distancia de Mahalanobis condicional por clase. El enfoque se evalúa sobre el \textit{Dry Bean Dataset} con nivel de confianza $1-\alpha = 0{,}95$ ($\alpha = 0{,}05$), obteniendo instancias conformemente ambiguas sobre las cuales se aplica el proceso de resolución contrafáctica. Se hipotetiza que la ambigüedad conforme está estrechamente relacionada con la proximidad a las fronteras de decisión, y que el razonamiento contrafáctico ofrece un mecanismo interpretable y accionable para navegar dicha incertidumbre.
+La predicción conforme (PC) ofrece un marco estadístico robusto para la
+cuantificación de incertidumbre, garantizando cobertura marginal formal
+bajo el único supuesto de intercambiabilidad de los datos. Sin embargo,
+la aparición de conjuntos de predicción ambiguos ($|C(X)| > 1$) limita
+su aplicabilidad en sistemas críticos de toma de decisiones, como el
+diagnóstico clínico o la evaluación de riesgo crediticio, donde se
+requiere una decisión única y justificable. Este artículo propone un
+marco metodológico que integra la PC con la Inteligencia Artificial
+Explicable (XAI) mediante explicaciones contrafácticas optimizadas, un
+método post-hoc agnóstico al modelo que genera perturbaciones mínimas
+e interpretables sobre las características de entrada. A diferencia de
+enfoques anteriores, se define una función de pérdida compuesta
+$\mathcal{L}(X, X')$ que incorpora explícitamente el umbral conforme
+$q_\alpha$, buscando perturbaciones mínimas $X'$ tales que el puntaje
+de no conformidad satisfaga estrictamente la condición de unicidad del
+conjunto de predicción. Adicionalmente, se garantiza la plausibilidad
+morfológica de los contrafácticos mediante restricciones de coherencia
+multivariada basadas en distancia de Mahalanobis condicional por clase.
+El enfoque se evalúa sobre el \textit{Dry Bean Dataset} con nivel de
+confianza $1-\alpha = 0{,}95$ ($\alpha = 0{,}05$), obteniendo entre 116
+y 204 instancias conformemente ambiguas según el modelo base, sobre las
+cuales se aplica el proceso de resolución contrafáctica. Se hipotetiza
+que la ambigüedad conforme está estrechamente relacionada con la
+proximidad a las fronteras de decisión, y que el razonamiento
+contrafáctico ofrece un mecanismo interpretable y accionable para
+navegar dicha incertidumbre.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -59,68 +84,214 @@ clasificación tabular, distancia de Mahalanobis condicional.
 % ─────────────────────────────────────────────
 \section{Introducción}
 
-En numerosos dominios de alto impacto, los sistemas de clasificación automática deben no solo predecir una etiqueta, sino también comunicar cuándo \emph{no} están en condiciones de hacerlo con suficiente certeza. En medicina, por ejemplo, un modelo que clasifica imágenes histológicas puede enfrentarse a muestras que comparten rasgos de dos o más patologías; en finanzas, un clasificador de riesgo crediticio puede encontrar solicitantes cuyo perfil se ubica en la frontera entre distintas categorías de riesgo. En ambos casos, una predicción puntual sin cuantificación de incertidumbre puede inducir decisiones clínicas o económicas erróneas con consecuencias graves. La necesidad de sistemas de predicción con garantías estadísticas formales y capacidad de explicación es, por lo tanto, un problema abierto y de creciente relevancia en la comunidad de aprendizaje automático.
+En numerosos dominios de alto impacto, los sistemas de clasificación
+automática deben no solo predecir una etiqueta, sino también comunicar
+cuándo \emph{no} están en condiciones de hacerlo con suficiente certeza.
+En medicina, por ejemplo, un modelo que clasifica imágenes histológicas
+puede enfrentarse a muestras que comparten rasgos de dos o más patologías;
+en finanzas, un clasificador de riesgo crediticio puede encontrar
+solicitantes cuyo perfil se ubica en la frontera entre distintas categorías
+de riesgo. En ambos casos, una predicción puntual sin cuantificación de
+incertidumbre puede inducir decisiones clínicas o económicas erróneas con
+consecuencias graves. La necesidad de sistemas de predicción con garantías
+estadísticas formales y capacidad de explicación es, por lo tanto, un
+problema abierto y de creciente relevancia en la comunidad de aprendizaje
+automático.
 
-Los modelos de clasificación contemporáneos, a pesar de su alta precisión empírica, carecen frecuentemente de mecanismos formales para comunicar su propia incertidumbre. La Predicción Conforme (PC) ha surgido como solución teórica potente~\cite{b3}, transformando predicciones puntuales en conjuntos de predicción $C(X)$ que contienen la etiqueta verdadera con probabilidad predefinida $1-\alpha$, bajo el único supuesto de intercambiabilidad de los datos.
+Los modelos de clasificación contemporáneos, a pesar de su alta precisión
+empírica, carecen frecuentemente de mecanismos formales para comunicar su
+propia incertidumbre. La Predicción Conforme (PC) ha surgido como solución
+teórica potente~\cite{b3}, transformando predicciones puntuales en conjuntos
+de predicción $C(X)$ que contienen la etiqueta verdadera con probabilidad
+predefinida $1-\alpha$, bajo el único supuesto de intercambiabilidad de los
+datos.
 
-Sin embargo, en regiones del espacio de características donde las fronteras de decisión se solapan, el modelo produce conjuntos ambiguos ($|C(X)| > 1$). Consideremos el escenario concreto de un sistema de apoyo al diagnóstico que devuelve $C(X) = \{\text{patología A},\, \text{patología B}\}$: el clínico sabe que el modelo es estadísticamente correcto al 95\,\%, pero no dispone de información accionable sobre qué característica del paciente, si cambiara, inclinaría la predicción hacia una sola clase. Este fenómeno no debe verse solo como un fallo del modelo, sino como una señal estructural: la instancia $X$ se encuentra en una región de alta incertidumbre epistémica, donde cambios pequeños e interpretables en las características pueden ser suficientes para resolver la ambigüedad~\cite{b1}.
+Sin embargo, en regiones del espacio de características donde las fronteras
+de decisión se solapan, el modelo produce conjuntos ambiguos ($|C(X)| > 1$).
+Consideremos el escenario concreto de un sistema de apoyo al diagnóstico que
+devuelve $C(X) = \{\text{patología A},\, \text{patología B}\}$: el clínico
+sabe que el modelo es estadísticamente correcto al 95\,\%, pero no dispone de
+información accionable sobre qué característica del paciente, si cambiara,
+inclinaría la predicción hacia una sola clase. Este fenómeno no debe verse
+solo como un fallo del modelo, sino como una señal estructural: la instancia
+$X$ se encuentra en una región de alta incertidumbre epistémica, donde
+cambios pequeños e interpretables en las características pueden ser
+suficientes para resolver la ambigüedad~\cite{b1}.
 
-En este trabajo, se aborda la ambigüedad conforme como un estado de incertidumbre \textit{resoluble} mediante perturbaciones contrafácticas~\cite{b4}. Las explicaciones contrafácticas constituyen un método de XAI \textbf{post-hoc}, \textbf{agnóstico al modelo} y de alcance \textbf{local} (por instancia), que responde a la pregunta: ``¿qué cambios mínimos en las características de entrada provocarían un resultado diferente?''~\cite{b4,b7}. La contribución principal es la formalización de un proceso de búsqueda que busca colapsar el conjunto de predicción a un singleton $\{Y_t\}$ en el punto contrafáctico $X'$. Si bien dicho punto pierde las garantías formales de cobertura marginal del split conformal tradicional debido a la ruptura de intercambiabilidad, el colapso actúa como guía heurística de certidumbre local del modelo, orientando la búsqueda hacia regiones de baja ambigüedad percibida para la clase objetivo.
+En este trabajo, se aborda la ambigüedad conforme como un estado de
+incertidumbre \textit{resoluble} mediante perturbaciones contrafácticas~\cite{b4}.
+Las explicaciones contrafácticas constituyen un método de XAI \textbf{post-hoc},
+\textbf{agnóstico al modelo} y de alcance \textbf{local} (por instancia),
+que responde a la pregunta: ``¿qué cambios mínimos en las características
+de entrada provocarían un resultado diferente?''~\cite{b4,b7}. La
+contribución principal es la formalización de un proceso de búsqueda que
+busca colapsar el conjunto de predicción a un singleton $\{Y_t\}$ en el
+punto contrafáctico $X'$. Si bien dicho punto pierde las garantías formales
+de cobertura marginal del split conformal tradicional debido a la ruptura
+de intercambiabilidad, el colapso actúa como guía heurística de certidumbre
+local del modelo, orientando la búsqueda hacia regiones de baja ambigüedad
+percibida para la clase objetivo.
 
 \subsection{Contexto de los Datos}
 
-El estudio se realiza sobre el \textbf{Dry Bean Dataset}~\cite{b5}, disponible en el repositorio UCI Machine Learning Repository, compuesto por 13\,611 instancias de siete variedades de frijol seco descritas mediante 16 características morfológicas continuas obtenidas mediante visión por computadora. Los datos no requieren imputación de valores faltantes, aunque sí un preprocesamiento de estandarización ($\mu = 0$, $\sigma = 1$) previo al entrenamiento. Las clases presentan un leve desbalanceo (la clase \textit{Bombay} tiene 522 instancias frente a las 3\,546 de \textit{Dermason}), lo que será considerado en el análisis de resultados. La elección de este dataset se justifica en detalle en la Sección~\ref{sec:datos}.
+El estudio se realiza sobre el \textbf{Dry Bean Dataset}~\cite{b5},
+disponible en el repositorio UCI Machine Learning Repository, compuesto
+por 13\,611 instancias de siete variedades de frijol seco descritas
+mediante 16 características morfológicas continuas obtenidas mediante
+visión por computadora. Los datos no requieren imputación de valores
+faltantes, aunque sí un preprocesamiento de estandarización
+($\mu = 0$, $\sigma = 1$) previo al entrenamiento. Las clases presentan un
+leve desbalanceo (la clase \textit{Bombay} tiene 522 instancias frente
+a las 3\,546 de \textit{Dermason}), lo que será considerado en el
+análisis de resultados. La elección de este dataset se justifica en
+detalle en la Sección~\ref{sec:datos}.
 
 \subsection{Trabajos Relacionados}
 
-Maalej et al.~\cite{b6} propusieron recientemente explicaciones contrafácticas específicamente diseñadas para conjuntos de predicción conformes, demostrando la viabilidad del enfoque en datos de texto. Este trabajo se diferencia en tres aspectos: (1) se enfoca en datos tabulares con características morfológicas correlacionadas; (2) incorpora restricciones de plausibilidad multivariada mediante distancia de Mahalanobis condicional por clase objetivo; y (3) evalúa explícitamente la relación entre la ambigüedad y la proximidad a fronteras de decisión mediante reducción de dimensionalidad.
+Maalej et al.~\cite{b6} propusieron recientemente explicaciones
+contrafácticas específicamente diseñadas para conjuntos de predicción
+conformes, demostrando la viabilidad del enfoque en datos de texto. Este
+trabajo se diferencia en tres aspectos: (1) se enfoca en datos tabulares
+con características morfológicas correlacionadas; (2) incorpora
+restricciones de plausibilidad multivariada mediante distancia de
+Mahalanobis condicional por clase objetivo; y (3) evalúa explícitamente
+la relación entre la ambigüedad y la proximidad a fronteras de decisión
+mediante reducción de dimensionalidad.
 
-Wachter et al.~\cite{b4} establecieron el marco teórico de las explicaciones contrafácticas como mecanismo de XAI sin acceso a los internos del modelo. En el ámbito de la cuantificación de incertidumbre, Angelopoulos y Bates~\cite{b2} proveen una introducción exhaustiva a la predicción conforme, mientras que Stutz et al.~\cite{b1} analizan específicamente el problema de la ambigüedad inherente en los conjuntos de predicción. Este trabajo conecta formalmente estas dos líneas de investigación para datos tabulares.
+Wachter et al.~\cite{b4} establecieron el marco teórico de las
+explicaciones contrafácticas como mecanismo de XAI sin acceso a los
+internos del modelo. En el ámbito de la cuantificación de incertidumbre,
+Angelopoulos y Bates~\cite{b2} proveen una introducción exhaustiva a la
+predicción conforme, mientras que Stutz et al.~\cite{b1} analizan
+específicamente el problema de la ambigüedad inherente en los conjuntos
+de predicción. Este trabajo conecta formalmente estas dos líneas de
+investigación para datos tabulares.
 
 \subsection{Pregunta de Investigación}
 
-Dada una instancia $X$ tal que su conjunto de predicción bajo nivel de confianza $1-\alpha = 0{,}95$ es ambiguo ($|C(X)| > 1$), ¿existe una perturbación mínima $\delta$ tal que $X' = X + \delta$ sea morfológicamente plausible respecto a la clase objetivo $Y_t$ y satisfaga $|C(X')| = 1$?
+Dada una instancia $X$ tal que su conjunto de predicción bajo nivel de
+confianza $1-\alpha = 0{,}95$ es ambiguo ($|C(X)| > 1$), ¿existe una
+perturbación mínima $\delta$ tal que $X' = X + \delta$ sea morfológicamente
+plausible respecto a la clase objetivo $Y_t$ y satisfaga $|C(X')| = 1$?
 
 Esta pregunta motiva un estudio con tres objetivos complementarios y medibles:
 \begin{itemize}
-    \item[$\bullet$] \textbf{O1 --- Interpretabilidad}: determinar, mediante reducción de dimensionalidad (t-SNE, UMAP)~\cite{b11,b12}, que las 204 instancias ambiguas identificadas bajo $\alpha = 0{,}05$ se concentran estadísticamente en las fronteras de decisión entre clases, cuantificando la proporción de ambigüedad por región del espacio de características.
+    \item[$\bullet$] \textbf{O1 --- Interpretabilidad}: determinar, mediante
+    reducción de dimensionalidad (t-SNE, UMAP)~\cite{b11,b12}, que las
+    instancias ambiguas identificadas bajo $\alpha = 0{,}05$ (204 para LR,
+    179 para XGBoost y 116 para MLP) se concentran estadísticamente en las
+    fronteras de decisión entre clases, cuantificando la proporción de
+    ambigüedad por región del espacio de características.
 
-    \item[$\bullet$] \textbf{O2 --- Accionabilidad}: lograr una tasa de éxito de resolución $\geq 70\%$ sobre las instancias ambiguas del conjunto de evaluación, definida como la proporción de instancias para las cuales el algoritmo encuentra un contrafáctico $X'$ con $|C(X')| = 1$, $d_M(X', \mathcal{D}_{Y_t}) \leq \tau_M$ y $\|X' - X\|_2 \leq \tau_d$.
+    \item[$\bullet$] \textbf{O2 --- Accionabilidad}: lograr una tasa de éxito
+    de resolución $\geq 70\%$ sobre las instancias ambiguas del
+    conjunto de evaluación, definida como la proporción de instancias para
+    las cuales el algoritmo encuentra un contrafáctico $X'$ con
+    $|C(X')| = 1$, $d_M(X', \mathcal{D}_{Y_t}) \leq \tau_M$ y
+    $\|X' - X\|_2 \leq \tau_d$.
 
-    \item[$\bullet$] \textbf{O3 --- Comparación de modelos}: establecer si la complejidad del modelo base (Regresión Logística vs.\ XGBoost vs.\ MLP) afecta significativamente la tasa de éxito y el costo de resolución, reportando diferencias estadísticamente significativas mediante prueba de Wilcoxon con $p < 0{,}05$~\cite{b13}.
+    \item[$\bullet$] \textbf{O3 --- Comparación de modelos}: establecer si
+    la complejidad del modelo base (Regresión Logística vs.\ XGBoost vs.\
+    MLP) afecta significativamente la tasa de éxito y el costo de resolución,
+    reportando diferencias estadísticamente significativas mediante prueba
+    de Wilcoxon con $p < 0{,}05$~\cite{b13}.
 \end{itemize}
 
-La implementación completa del proyecto se encuentra disponible en: \url{https://github.com/Sofiwiwi/Proyecto-XAI}
+La implementación completa del proyecto se encuentra disponible en:
+\url{https://github.com/Sofiwiwi/Proyecto-XAI}
 
 % ─────────────────────────────────────────────
 \section{Método Propuesto}
 
-En esta sección se describe el marco teórico, los datos utilizados, el entorno de experimentación y la arquitectura completa de la solución que integra Predicción Conforme con explicaciones contrafácticas para resolver la ambigüedad en conjuntos de predicción sobre datos tabulares.\footnote{El código y resultados se mantendrán en el repositorio público del proyecto en GitHub, sincronizado con los notebooks ejecutados en Google Colab.}
+En esta sección se describe el marco teórico, los datos utilizados, el
+entorno de experimentación y la arquitectura completa de la solución que
+integra Predicción Conforme con explicaciones contrafácticas para resolver
+la ambigüedad en conjuntos de predicción sobre datos tabulares.\footnote{El
+código y resultados se mantendrán en el repositorio público del proyecto
+en GitHub, sincronizado con los notebooks ejecutados en Kaggle.}
 
 \subsection{Marco teórico}
 
-El modelo propuesto integra Predicción Conforme (CP) con explicaciones contrafácticas post-hoc para resolver la ambigüedad en conjuntos de predicción multiclase. Cuando las fronteras de decisión entre clases se solapan, la CP genera conjuntos ambiguos con $|C(x)|>1$, lo que dificulta la toma de decisiones en dominios críticos donde se requiere una única etiqueta justificable~\cite{b1}. En este trabajo se interpreta dicha ambigüedad como un estado de incertidumbre \emph{resoluble} mediante cambios mínimos y plausibles en las características de entrada, lo que motiva el uso de explicaciones contrafácticas como herramienta de XAI local y accionable~\cite{b4,b7}.
+El modelo propuesto integra Predicción Conforme (CP) con explicaciones
+contrafácticas post-hoc para resolver la ambigüedad en conjuntos de
+predicción multiclase. Cuando las fronteras de decisión entre clases se
+solapan, la CP genera conjuntos ambiguos con $|C(x)|>1$, lo que dificulta
+la toma de decisiones en dominios críticos donde se requiere una única
+etiqueta justificable~\cite{b1}. En este trabajo se interpreta dicha
+ambigüedad como un estado de incertidumbre \emph{resoluble} mediante
+cambios mínimos y plausibles en las características de entrada, lo que
+motiva el uso de explicaciones contrafácticas como herramienta de XAI
+local y accionable~\cite{b4,b7}.
 
-Las explicaciones contrafácticas responden a la pregunta ``¿qué debería cambiar en esta instancia para obtener una predicción diferente?'', generando un punto $x'$ cercano a $x$ que altera la predicción del modelo~\cite{b4}. La contribución central consiste en definir una función de pérdida que incorpora explícitamente el umbral conforme $q_\alpha$ y que busca contrafácticos $x'$ tales que $C(x') = \{y_t\}$, proporcionando una etiqueta única y una explicación interpretable que sirve como guía heurística de certidumbre local del modelo base en el punto modificado, aun cuando las garantías estadísticas globales no se preserven en la instancia optimizada~\cite{b1,b6}.
+Las explicaciones contrafácticas responden a la pregunta ``¿qué debería
+cambiar en esta instancia para obtener una predicción diferente?'',
+generando un punto $x'$ cercano a $x$ que altera la predicción del
+modelo~\cite{b4}. La contribución central consiste en definir una función
+de pérdida que incorpora explícitamente el umbral conforme $q_\alpha$ y
+que busca contrafácticos $x'$ tales que $C(x') = \{y_t\}$, proporcionando
+una etiqueta única y una explicación interpretable que sirve como guía
+heurística de certidumbre local del modelo base en el punto modificado,
+aun cuando las garantías estadísticas globales no se preserven en la
+instancia optimizada~\cite{b1,b6}.
 
 \subsection{Datos: Dry Bean Dataset}
 \label{sec:datos}
 
-Se utilizará el \textit{Dry Bean Dataset}~\cite{b5}, disponible en el repositorio UCI Machine Learning Repository. Contiene 13\,611 instancias de siete variedades de frijol seco (\textit{Seker, Barbunya, Bombay, Cali, Dermason, Horoz} y \textit{Sira}), descritas mediante 16 características morfológicas continuas (área, perímetro, ejes mayor y menor, entre otras) obtenidas mediante visión por computadora. El dataset es público, no requiere licencia especial y está libre de valores faltantes.
+Se utilizará el \textit{Dry Bean Dataset}~\cite{b5}, disponible en el
+repositorio UCI Machine Learning Repository. Contiene 13\,611 instancias
+de siete variedades de frijol seco (\textit{Seker, Barbunya, Bombay, Cali,
+Dermason, Horoz} y \textit{Sira}), descritas mediante 16 características
+morfológicas continuas (área, perímetro, ejes mayor y menor, entre otras)
+obtenidas mediante visión por computadora. El dataset es público, no
+requiere licencia especial y está libre de valores faltantes.
 
-Este conjunto de datos es especialmente adecuado para estudiar ambigüedad conforme por dos razones técnicas. Primero, varias clases presentan alto solapamiento en el espacio de características; en particular, \textit{Dermason} y \textit{Sira} comparten rangos similares en varios ejes morfológicos, generando fronteras de decisión difusas que producen naturalmente conjuntos de predicción con $|C(x)|>1$. Segundo, las 16 características exhiben fuertes correlaciones geométricas (por ejemplo, área y perímetro), lo que justifica el uso de restricciones multivariadas para garantizar plausibilidad morfológica.
+Este conjunto de datos es especialmente adecuado para estudiar ambigüedad
+conforme por dos razones técnicas. Primero, varias clases presentan alto
+solapamiento en el espacio de características; en particular,
+\textit{Dermason} y \textit{Sira} comparten rangos similares en varios
+ejes morfológicos, generando fronteras de decisión difusas que producen
+naturalmente conjuntos de predicción con $|C(x)|>1$. Segundo, las 16
+características exhiben fuertes correlaciones geométricas (por ejemplo,
+área y perímetro), lo que justifica el uso de restricciones multivariadas
+para garantizar plausibilidad morfológica.
 
-El preprocesamiento consiste en una estandarización ($\mu = 0$, $\sigma = 1$) de las características y en la partición del dataset en tres subconjuntos disjuntos: entrenamiento (60\,\%), calibración (20\,\%) y evaluación (20\,\%). Con $\alpha = 0{,}05$, el conjunto de evaluación generá instancias conformemente ambiguas, suficientes para los experimentos de resolución contrafáctica. Dado el leve desbalanceo de clases, se reportan métricas macro-promediadas además de las globales~\cite{b5}.
+El preprocesamiento consiste en una estandarización ($\mu = 0$, $\sigma = 1$)
+de las características y en la partición del dataset en tres subconjuntos
+disjuntos: entrenamiento (60\,\%), calibración (20\,\%) y evaluación
+(20\,\%). Con $\alpha = 0{,}05$, el conjunto de evaluación genera entre
+116 y 204 instancias conformemente ambiguas según el modelo base
+(LR: 204, XGBoost: 179, MLP: 116), suficientes para los experimentos
+de resolución contrafáctica. Dado el leve desbalanceo de clases, se
+reportan métricas macro-promediadas además de las globales~\cite{b5}.
 
 \subsection{Entorno de experimentación}
 
-El desarrollo inicial del proyecto se realizó en notebooks tipo Kaggle, aplicando del acelerador GPU T4x2 que este mismo ofrece. También proporciona un entorno de Python preconfigurado con librerías como \texttt{scikit-learn}, \texttt{xgboost}, \texttt{NumPy} y \texttt{SciPy}, lo que facilita la implementación de la predicción conforme y de la optimización contrafáctica sin necesidad de infraestructura especializada.
+Los experimentos se ejecutaron en un notebook de Kaggle sobre un sistema
+Linux \texttt{6.6.122+ x86\_64} con Python \texttt{3.12.12}, 2 núcleos
+físicos, 4 lógicos y 31{,}35~GB de RAM, haciendo uso del acelerador GPU
+T4x2 provisto por la plataforma. El entorno incluye librerías estándar
+de aprendizaje automático preconfiguradas: \texttt{scikit-learn},
+\texttt{xgboost}, \texttt{NumPy} y \texttt{SciPy}, lo que facilita la
+implementación sin necesidad de infraestructura especializada.
 
 \subsection{Arquitectura general de la solución}
 
-El modelo propuesto se apoya en una arquitectura comparativa con tres clasificadores base: Regresión Logística, XGBoost y una Red Neuronal Multicapa (MLP). La Regresión Logística actúa como línea base interpretable, mientras que XGBoost y MLP representan modelos de caja negra con distinta capacidad de generalización, lo que permite estudiar cómo la complejidad del modelo afecta la ambigüedad conforme y la factibilidad de resolverla mediante contrafácticos (objetivo O3).
+El modelo propuesto se apoya en una arquitectura comparativa con tres
+clasificadores base: Regresión Logística, XGBoost y una Red Neuronal
+Multicapa (MLP). La Regresión Logística actúa como línea base
+interpretable, mientras que XGBoost y MLP representan modelos de caja
+negra con distinta capacidad de generalización, lo que permite estudiar
+cómo la complejidad del modelo afecta la ambigüedad conforme y la
+factibilidad de resolverla mediante contrafácticos (objetivo O3).
 
-Para cada modelo base se aplica Predicción Conforme dividida (\textit{split conformal prediction}). A partir del conjunto de calibración se calcula un cuantil empírico $q_\alpha$ sobre un puntaje de no conformidad $s(x,y)$ definido a partir de las probabilidades de clase; este cuantil se utiliza luego para construir, en el conjunto de evaluación, conjuntos de predicción $C(x)$ con nivel de confianza $1-\alpha = 0{,}95$. Las instancias ambiguas se identifican como aquellas para las que $|C(x)|>1$.
+Para cada modelo base se aplica Predicción Conforme dividida
+(\textit{split conformal prediction}). A partir del conjunto de
+calibración se calcula un cuantil empírico $q_\alpha$ sobre un puntaje
+de no conformidad $s(x,y)$ definido a partir de las probabilidades de
+clase; este cuantil se utiliza luego para construir, en el conjunto de
+evaluación, conjuntos de predicción $C(x)$ con nivel de confianza
+$1-\alpha = 0{,}95$. Las instancias ambiguas se identifican como aquellas
+para las que $|C(x)|>1$.
 
 De forma resumida, el pipeline de la solución es el siguiente:
 \begin{enumerate}
@@ -140,29 +311,50 @@ De forma resumida, el pipeline de la solución es el siguiente:
 
 \subsection{Predicción Conforme dividida}
 
-Se utiliza Predicción Conforme dividida para clasificación~\cite{b2,b3}. Dado un conjunto de calibración $\{(x_i,y_i)\}_{i=1}^n$ y un puntaje de no conformidad $s(x,y) = 1 - \hat{p}(y\mid x)$, se define el cuantil empírico:
+Se utiliza Predicción Conforme dividida para clasificación~\cite{b2,b3}.
+Dado un conjunto de calibración $\{(x_i,y_i)\}_{i=1}^n$ y un puntaje
+de no conformidad $s(x,y) = 1 - \hat{p}(y\mid x)$, se define el cuantil
+empírico:
 \begin{equation}
     q_{\alpha} = Q\!\left(\{s(x_i, y_i)\}_{i=1}^{n};
     \frac{\lceil (1-\alpha)(n+1) \rceil}{n}\right),
     \label{eq:qhat}
 \end{equation}
-donde $Q(\cdot; p)$ denota el cuantil de nivel $p$. Se utiliza $\alpha = 0{,}05$ (cobertura marginal del 95\,\%) en todos los experimentos; este valor fue seleccionado a partir de un análisis exploratorio que mostró que con $\alpha = 0{,}10$ los tres modelos base no generan instancias ambiguas en el conjunto de evaluación, dada su alta precisión ($\approx 92\%$). Con $\alpha = 0.05$ se obtienen 204 instancias ambiguas, suficientes para los experimentos de resolución contrafáctica. La cobertura marginal garantizada en este caso es del 95\,\%, lo que representa una garantía estadística más conservadora que en configuraciones habituales de la literatura.
+donde $Q(\cdot; p)$ denota el cuantil de nivel $p$. Se utiliza
+$\alpha = 0{,}05$ (cobertura marginal del 95\,\%) en todos los
+experimentos; este valor fue seleccionado a partir de un análisis
+exploratorio que mostró que con $\alpha = 0{,}10$ los tres modelos base
+no generan instancias ambiguas en el conjunto de evaluación, dada su
+alta precisión ($\approx 92\%$). Con $\alpha = 0{,}05$ se obtienen entre
+116 y 204 instancias ambiguas según el modelo (LR: 204, XGBoost: 179,
+MLP: 116). La cobertura marginal garantizada es del 95\,\%, lo que
+representa una garantía estadística más conservadora que en
+configuraciones habituales de la literatura.
 
 El conjunto de predicción para una nueva instancia se construye como:
 \begin{equation}
     C(x) = \{y : s(x, y) \leq q_{\alpha}\}.
     \label{eq:predset}
 \end{equation}
-Bajo el supuesto de intercambiabilidad, se garantiza la cobertura marginal $P(Y \in C(X)) \geq 1 - \alpha$~\cite{b2}. Las instancias ambiguas se definen como aquellas para las cuales $|C(x)| > 1$, indicando que múltiples clases son estadísticamente consistentes con la entrada $x$~\cite{b1}.
+Bajo el supuesto de intercambiabilidad, se garantiza la cobertura
+marginal $P(Y \in C(X)) \geq 1 - \alpha$~\cite{b2}. Las instancias
+ambiguas se definen como aquellas para las cuales $|C(x)| > 1$,
+indicando que múltiples clases son estadísticamente consistentes con
+la entrada $x$~\cite{b1}.
 
 \subsection{Formulación de la optimización contrafáctica}
 
-La resolución de la ambigüedad se plantea como un problema de optimización restringida, en el que se busca una perturbación mínima $x'$ de una instancia ambigua $x$ que cumpla simultáneamente: (i) que el conjunto de predicción conforme colapse a un singleton con la clase objetivo $y_t$, y (ii) que el punto contrafáctico sea morfológicamente plausible respecto a la distribución de la clase objetivo~\cite{b4,b6}.
+La resolución de la ambigüedad se plantea como un problema de
+optimización restringida, en el que se busca una perturbación mínima
+$x'$ de una instancia ambigua $x$ que cumpla simultáneamente: (i) que
+el conjunto de predicción conforme colapse a un singleton con la clase
+objetivo $y_t$, y (ii) que el punto contrafáctico sea morfológicamente
+plausible respecto a la distribución de la clase objetivo~\cite{b4,b6}.
 
 Para ello se define una función de pérdida compuesta:
 \begin{equation}
     \begin{aligned}
-        \mathcal{L}(x,x') =&
+        \mathcal{L}(x,x') =&\;
         \lambda \left(\|x'-x\|_1 + \|x'-x\|_2\right) \\
         &+ \mathcal{L}_{\mathrm{conf}}(x', y_t, q_\alpha) \\
         &+ \gamma \, d_M(x', \mathcal{D}_{y_t})
@@ -186,27 +378,78 @@ donde:
     de modo que se fuerza la inclusión de $y_t$ en $C(x')$ y la
     exclusión del resto de las clases~\cite{b1}.
 
-    \item $d_M(x', \mathcal{D}_{y_t})$ es la distancia de Mahalanobis condicional de $x'$ respecto a la distribución de la clase objetivo $y_t$, y $\gamma>0$ pondera la restricción de plausibilidad. Los hiperparámetros $\lambda$ y $\gamma$ se seleccionan mediante búsqueda en grilla sobre $\lambda \in \{0.1,\ 1.0,\ 10.0\}$ y $\gamma \in \{0.1,\ 0.5,\ 2.0\}$, evaluada sobre las instancias ambiguas del conjunto de calibración. Los umbrales de aceptación se fijan en $\tau_d = 8.0$ y $\tau_M = 15.0$; valores más estrictos resultaron en tasas de éxito inferiores al $30\%$ para modelos lineales, dado que las instancias ambiguas bajo $\alpha = 0.05$ requieren perturbaciones de mayor magnitud para cruzar las fronteras de decisión.
+    \item $d_M(x', \mathcal{D}_{y_t})$ es la distancia de Mahalanobis
+    condicional de $x'$ respecto a la distribución de la clase objetivo
+    $y_t$, y $\gamma>0$ pondera la restricción de plausibilidad. Los
+    hiperparámetros $\lambda$ y $\gamma$ se seleccionan mediante búsqueda
+    en grilla sobre $\lambda \in \{0{,}1;\; 1{,}0;\; 10{,}0\}$ y
+    $\gamma \in \{0{,}1;\; 0{,}5;\; 2{,}0\}$, evaluada sobre las
+    instancias ambiguas del conjunto de calibración. Los umbrales de
+    aceptación se fijan en $\tau_d = 8{,}0$ y $\tau_M = 15{,}0$; valores
+    más estrictos resultaron en tasas de éxito inferiores al 30\,\% para
+    modelos lineales, dado que las instancias ambiguas bajo $\alpha = 0{,}05$
+    requieren perturbaciones de mayor magnitud para cruzar las fronteras
+    de decisión.
 \end{itemize}
 
 \paragraph{Limitación teórica.}
-Al optimizar activamente $x'$ para minimizar $\mathcal{L}(x, x')$ y forzar $C(x') = \{y_t\}$, se rompe el supuesto de intercambiabilidad requerido por la Predicción Conforme. Dado que $x'$ es una instancia sintética sometida a un sesgo de selección mediante optimización, el conjunto $C(x')$ carece de la garantía matemática de cobertura marginal del split conformal. Por lo tanto, el colapso del conjunto conforme debe interpretarse no como una garantía estadística sobre el contrafáctico, sino como un \emph{criterio local de optimización} diseñado para orientar la búsqueda hacia regiones donde el modelo base exhibe alta confianza y baja ambigüedad respecto a la clase objetivo.
+Al optimizar activamente $x'$ para minimizar $\mathcal{L}(x, x')$ y
+forzar $C(x') = \{y_t\}$, se rompe el supuesto de intercambiabilidad
+requerido por la Predicción Conforme. Dado que $x'$ es una instancia
+sintética sometida a un sesgo de selección mediante optimización, el
+conjunto $C(x')$ carece de la garantía matemática de cobertura marginal
+del split conformal. Por lo tanto, el colapso del conjunto conforme debe
+interpretarse no como una garantía estadística sobre el contrafáctico,
+sino como un \emph{criterio local de optimización} diseñado para orientar
+la búsqueda hacia regiones donde el modelo base exhibe alta confianza y
+baja ambigüedad respecto a la clase objetivo.
 
-\paragraph{Estrategia de optimización según el tipo de modelo.}
-La pérdida~\eqref{eq:loss} se minimiza numéricamente mediante el algoritmo L-BFGS-B implementado en \texttt{scipy.optimize.minimize} para los tres clasificadores base (Regresión Logística, XGBoost y MLP). En cada instancia ambigua se optimiza directamente sobre el vector de características $x'$, utilizando derivadas aproximadas numéricamente a partir de las probabilidades de clase $\hat{p}(y \mid x')$ devueltas por cada modelo. Para garantizar la viabilidad computacional, cada llamada al optimizador se limita a un máximo de 200 iteraciones (\texttt{maxiter = 200}), una tolerancia de función (\texttt{ftol = 1e-7}) y un \textit{timeout} de 10 segundos por instancia, detenido mediante una envoltura temporal externa. Estos valores buscan equilibrar costo computacional y calidad de los candidatos: el criterio de aceptación es discreto (el conjunto conforme es $\{y_t\}$ o no lo es) y, por tanto, no se requiere convergencia de alta precisión a un mínimo continuo de la función de pérdida.
+\paragraph{Estrategia de optimización.}
+La pérdida~\eqref{eq:loss} se minimiza numéricamente mediante el
+algoritmo L-BFGS-B implementado en \texttt{scipy.optimize.minimize} para
+los tres clasificadores base. En cada instancia ambigua se optimiza
+directamente sobre el vector de características $x'$, utilizando
+derivadas aproximadas numéricamente a partir de las probabilidades de
+clase $\hat{p}(y \mid x')$ devueltas por cada modelo. Para garantizar
+la viabilidad computacional, cada llamada al optimizador se limita a un
+máximo de 200 iteraciones (\texttt{maxiter = 200}), una tolerancia de
+función (\texttt{ftol = 1e-7}) y un \textit{timeout} de 10 segundos por
+instancia, detenido mediante una envoltura temporal externa. Estos valores
+buscan equilibrar costo computacional y calidad de los candidatos: el
+criterio de aceptación es discreto ($C(x') = \{y_t\}$ o no lo es) y, por
+tanto, no se requiere convergencia de alta precisión.
 
 \subsection{Plausibilidad y coherencia multivariada}
 
-Para garantizar que los contrafácticos generados sean morfológicamente posibles no es suficiente restringir cada característica a su rango univariado observado. Las 16 características del dataset exhiben fuertes correlaciones estructurales (por ejemplo, el área crece aproximadamente de forma cuadrática con los ejes principales), por lo que una perturbación que viole estas relaciones produciría instancias físicamente incoherentes.
+Para garantizar que los contrafácticos generados sean morfológicamente
+posibles no es suficiente restringir cada característica a su rango
+univariado observado. Las 16 características del dataset exhiben
+fuertes correlaciones estructurales (por ejemplo, el área crece
+aproximadamente de forma cuadrática con los ejes principales), por lo
+que una perturbación que viole estas relaciones produciría instancias
+físicamente incoherentes.
 
-Se incorpora la distancia de Mahalanobis \emph{condicional} $d_M(x', \mathcal{D}_{y_t})$ como restricción suave en la función de pérdida~\eqref{eq:loss}, donde $\mathcal{D}_{y_t}$ representa la distribución empírica de los datos de entrenamiento correspondientes a la clase objetivo $y_t$, caracterizada por su media $\mu_{y_t}$ y su matriz de covarianza $\Sigma_{y_t}$:
+Se incorpora la distancia de Mahalanobis \emph{condicional}
+$d_M(x', \mathcal{D}_{y_t})$ como restricción suave en la función de
+pérdida~\eqref{eq:loss}, donde $\mathcal{D}_{y_t}$ representa la
+distribución empírica de los datos de entrenamiento correspondientes
+a la clase objetivo $y_t$, caracterizada por su media $\mu_{y_t}$ y
+su matriz de covarianza $\Sigma_{y_t}$:
 \begin{equation}
     d_M(x', \mathcal{D}_{y_t}) =
     \sqrt{(x' - \mu_{y_t})^\top \Sigma_{y_t}^{-1} (x' - \mu_{y_t})}.
     \label{eq:maha}
 \end{equation}
 
-El uso de la métrica condicionada por clase evita penalizar contrafácticos plausibles que se alejan de la media global debido a la heterogeneidad física entre clases (por ejemplo, entre \textit{Bombay} y \textit{Dermason}, que difieren considerablemente en tamaño). Un valor bajo de $d_M$ indica que $x'$ es coherente con la morfología y variabilidad multivariada de la clase objetivo $y_t$. En los experimentos se analizará la distribución de esta distancia condicional antes y después de la generación de contrafácticos para verificar que la plausibilidad se mantiene dentro de los rangos característicos de la clase objetivo~\cite{b10}.
+El uso de la métrica condicionada por clase evita penalizar
+contrafácticos plausibles que se alejan de la media global debido a la
+heterogeneidad física entre clases (por ejemplo, entre \textit{Bombay}
+y \textit{Dermason}, que difieren considerablemente en tamaño). Un valor
+bajo de $d_M$ indica que $x'$ es coherente con la morfología y
+variabilidad multivariada de la clase objetivo $y_t$. En los experimentos
+se analizará la distribución de esta distancia condicional antes y después
+de la generación de contrafácticos para verificar que la plausibilidad se
+mantiene dentro de los rangos característicos de la clase objetivo~\cite{b10}.
 
 % ─────────────────────────────────────────────
 \section{Plan de Evaluación}
@@ -217,8 +460,7 @@ El enfoque propuesto será evaluado mediante las siguientes métricas:
 \begin{itemize}
     \item[$\bullet$] \textbf{Tasa de éxito (Resolución Conforme)}:
     proporción de instancias ambiguas para las cuales se encontró un
-    contrafáctico $X'$ con $|C(X')| = 1$ (umbral objetivo:
-    $\geq 70\%$).
+    contrafáctico $X'$ con $|C(X')| = 1$ (umbral objetivo: $\geq 70\%$).
 
     \item[$\bullet$] \textbf{Costo de resolución}: magnitud de la
     perturbación necesaria, medida en normas $L_1$ y $L_2$.
@@ -238,7 +480,11 @@ El enfoque propuesto será evaluado mediante las siguientes métricas:
 
 \subsection{Evaluación de Explicaciones Contrafácticas}
 
-Para evaluar la calidad de las explicaciones generadas se emplea un conjunto de métricas nativas y teóricamente consistentes con métodos basados en ejemplos~\cite{b8,b9,b10}, en lugar de métricas de fidelidad de atribución que asumen vectores de importancia y resultan conceptualmente incompatibles con contrafácticos:
+Para evaluar la calidad de las explicaciones generadas se emplea un
+conjunto de métricas nativas y teóricamente consistentes con métodos
+basados en ejemplos~\cite{b8,b9,b10}, en lugar de métricas de fidelidad
+de atribución que asumen vectores de importancia y resultan
+conceptualmente incompatibles con contrafácticos:
 
 \begin{itemize}
     \item[$\bullet$] \textbf{Escasez (Sparsity)}~\cite{b8}: número de
@@ -261,136 +507,181 @@ Para evaluar la calidad de las explicaciones generadas se emplea un conjunto de 
     identificará \emph{a priori} el subconjunto de características
     morfológicamente accionables (aquellas que pueden variar
     independientemente, como elongación y compacidad) en contraposición
-    a las derivadas (como área o perímetro, que son función de otras
-    medidas). Se reportará la proporción de contrafácticos que modifican
-    exclusivamente características accionables como indicador de la
-    utilidad práctica de la explicación.
+    a las derivadas (como área o perímetro). Se reportará la proporción
+    de contrafácticos que modifican exclusivamente características
+    accionables como indicador de la utilidad práctica de la explicación.
 \end{itemize}
 
 \subsection{Comparación entre Modelos}
 
-Se comparará el rendimiento del marco propuesto entre los tres clasificadores base (XGBoost, MLP y Regresión Logística), reportando para cada uno la tasa de éxito, el costo de resolución promedio y la plausibilidad de los contrafácticos generados. Las diferencias se evaluarán con prueba de Wilcoxon con nivel de significancia $p < 0{,}05$~\cite{b13}.
+Se comparará el rendimiento del marco propuesto entre los tres
+clasificadores base (XGBoost, MLP y Regresión Logística), reportando
+para cada uno la tasa de éxito, el costo de resolución promedio y la
+plausibilidad de los contrafácticos generados. Las diferencias se
+evaluarán con prueba de Wilcoxon con nivel de significancia
+$p < 0{,}05$~\cite{b13}.
 
 \subsection{Factibilidad Computacional}
 
-El proyecto es factible dentro del semestre: el Dry Bean Dataset es de acceso libre~\cite{b5}; la predicción conforme dividida se implementa de forma nativa sin dependencias adicionales; y la optimización contrafáctica se realiza para los tres modelos base mediante \texttt{scipy.optimize.minimize} con el algoritmo L-BFGS-B, utilizando un máximo de 200 iteraciones y un \textit{timeout} de 10 segundos por instancia ambigua. Las métricas de evaluación de contrafácticos se calculan con \texttt{NumPy} y \texttt{SciPy}. Todo el pipeline puede ejecutarse en CPU estándar sin infraestructura especializada, como la proporcionada por Google Colab.
+El proyecto es factible dentro del semestre: el Dry Bean Dataset es de
+acceso libre~\cite{b5}; la predicción conforme dividida se implementa de
+forma nativa sin dependencias adicionales; y la optimización contrafáctica
+se realiza mediante \texttt{scipy.optimize.minimize} con L-BFGS-B,
+utilizando un máximo de 200 iteraciones y un \textit{timeout} de
+10 segundos por instancia. Las métricas de evaluación se calculan con
+\texttt{NumPy} y \texttt{SciPy}. Todo el pipeline puede ejecutarse en
+CPU estándar sin infraestructura especializada, como la proporcionada
+por Kaggle.
 
+% ─────────────────────────────────────────────
 \section{Resultados Experimentales}
 
-En esta sección se reportan los resultados preliminares obtenidos tras la primera ejecución completa del pipeline experimental. Dado que el objetivo de esta entrega es documentar avances iniciales, los resultados presentados no corresponden aún a una evaluación final del método, sino a una validación temprana del flujo de entrenamiento, calibración conforme, detección de ambigüedad y resolución contrafáctica.
+En esta sección se reportan los resultados preliminares obtenidos tras
+la primera ejecución completa del pipeline experimental. Los resultados
+presentados corresponden a una validación temprana del flujo de
+entrenamiento, calibración conforme, detección de ambigüedad y resolución
+contrafáctica, y deben interpretarse como preliminares.
 
 \subsection{Entorno de ejecución}
 
-Los experimentos fueron ejecutados en un notebook de Kaggle. El entorno utilizado corresponde a un sistema Linux \texttt{6.6.122+ x86\_64}, con Python \texttt{3.12.12}, compilado con GCC \texttt{11.4.0}. A nivel de hardware, el entorno reportó un procesador \texttt{x86\_64}, 2 núcleos físicos, 4 núcleos lógicos y 31,35 GB de memoria RAM. Además, el notebook fue configurado con acelerador GPU T4x2, provisto por Kaggle.
+Los experimentos fueron ejecutados en Kaggle sobre un sistema Linux
+\texttt{6.6.122+ x86\_64} con Python \texttt{3.12.12} (GCC
+\texttt{11.4.0}), 2 núcleos físicos, 4 lógicos, 31{,}35~GB de RAM y
+acelerador GPU T4x2. Se utilizaron \texttt{NumPy}, \texttt{Pandas},
+\texttt{Matplotlib}, \texttt{SciPy}, \texttt{Scikit-learn},
+\texttt{XGBoost} y \texttt{ucimlrepo}.
 
-La implementación fue desarrollada utilizando librerías estándar de aprendizaje automático, análisis de datos y optimización numérica. En particular, se utilizaron \texttt{NumPy}, \texttt{Pandas}, \texttt{Matplotlib}, \texttt{SciPy}, \texttt{Scikit-learn}, \texttt{XGBoost} y \texttt{ucimlrepo}. Las funciones principales empleadas incluyen \texttt{train\_test\_split}, \texttt{StandardScaler}, \texttt{LabelEncoder}, \texttt{LogisticRegression}, \texttt{MLPClassifier}, \texttt{XGBClassifier}, \texttt{classification\_report}, \texttt{TSNE}, \texttt{minimize}, \texttt{mahalanobis} y \texttt{wilcoxon}.
+\subsection{Resultados de clasificación}
 
-El código fuente y los notebooks experimentales se encuentran disponibles en el repositorio GitHub del proyecto.
-
-\subsection{Resultados preliminares de clasificación}
-
-La primera prueba experimental consideró tres modelos base: Regresión Logística, XGBoost y MLP. La Tabla~\ref{tab:resultados_clasificacion_preliminar} resume el desempeño obtenido sobre el conjunto de prueba.
+La Tabla~\ref{tab:clasificacion} resume el desempeño de los tres modelos
+base sobre el conjunto de prueba.
 
 \begin{table}[h]
 \centering
-\caption{Resultados preliminares de clasificación.}
-\label{tab:resultados_clasificacion_preliminar}
+\caption{Resultados de clasificación sobre el conjunto de prueba.}
+\label{tab:clasificacion}
 \begin{tabular}{lccc}
-\hline
+\toprule
 \textbf{Modelo} & \textbf{Accuracy} & \textbf{Macro F1} & \textbf{Weighted F1} \\
-\hline
-Regresión Logística & 0,9199 & 0,93 & 0,92 \\
-XGBoost             & 0,9203 & 0,93 & 0,92 \\
-MLP                 & 0,9236 & 0,94 & 0,92 \\
-\hline
+\midrule
+Regresión Logística & 0{,}9199 & 0{,}93 & 0{,}92 \\
+XGBoost             & 0{,}9203 & 0{,}93 & 0{,}92 \\
+MLP                 & 0{,}9236 & 0{,}94 & 0{,}92 \\
+\bottomrule
 \end{tabular}
 \end{table}
 
-Los tres modelos obtuvieron un rendimiento similar, con exactitudes cercanas al 92\%. La MLP presentó el mejor desempeño global, alcanzando una exactitud de 0,9236, seguida por XGBoost con 0,9203 y Regresión Logística con 0,9199. Estos resultados permiten continuar con la etapa conforme sobre modelos que ya presentan una capacidad predictiva razonable.
+Los tres modelos obtuvieron rendimiento similar ($\approx 92\%$). MLP
+presentó el mejor desempeño global (0{,}9236), seguido por XGBoost
+(0{,}9203) y Regresión Logística (0{,}9199).
 
-\subsection{Resultados preliminares de predicción conforme}
+\subsection{Predicción conforme y detección de ambigüedad}
 
-Luego del entrenamiento de los modelos, se aplicó predicción conforme dividida con $\alpha = 0{,}05$, correspondiente a una cobertura objetivo del 95\%. Los umbrales conformes obtenidos fueron $\hat{q}=0{,}6799$ para Regresión Logística, $\hat{q}=0{,}7076$ para XGBoost y $\hat{q}=0{,}6769$ para MLP.
+Se aplicó predicción conforme dividida con $\alpha = 0{,}05$. Los
+umbrales conformes obtenidos fueron $\hat{q} = 0{,}6799$ (LR),
+$\hat{q} = 0{,}7076$ (XGBoost) y $\hat{q} = 0{,}6769$ (MLP).
+La Tabla~\ref{tab:conforme} resume los resultados.
 
 \begin{table}[t]
 \centering
-\caption{Resultados preliminares de predicción conforme.}
-\label{tab:resultados_conforme_preliminar}
-\resizebox{\columnwidth}{!}{
+\caption{Resultados de predicción conforme ($\alpha = 0{,}05$).}
+\label{tab:conforme}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lccccc}
 \toprule
-\textbf{Modelo} & \textbf{Cobertura} & \textbf{N ambig.} & \textbf{\% ambig.} & $\mathbf{|C|}$ \textbf{prom.} & \textbf{Vacíos} \\
+\textbf{Modelo} & \textbf{Cobertura} & \textbf{N ambig.} &
+\textbf{\% ambig.} & $\mathbf{|C|}$ \textbf{prom.} & \textbf{Vacíos} \\
 \midrule
-Regresión Logística & 0,9479 & 204 & 7,5\% & 1,075 & 0 \\
-XGBoost             & 0,9486 & 179 & 6,6\% & 1,066 & 0 \\
-MLP                 & 0,9412 & 116 & 4,3\% & 1,043 & 0 \\
+Regresión Logística & 0{,}9479 & 204 & 7{,}5\% & 1{,}075 & 0 \\
+XGBoost             & 0{,}9486 & 179 & 6{,}6\% & 1{,}066 & 0 \\
+MLP                 & 0{,}9412 & 116 & 4{,}3\% & 1{,}043 & 0 \\
 \bottomrule
-\end{tabular}
-}
+\end{tabular}}
 \end{table}
 
-Las coberturas empíricas obtenidas se mantuvieron cercanas al 95\% esperado. Regresión Logística y XGBoost alcanzaron coberturas de 94,79\% y 94,86\%, respectivamente, mientras que MLP obtuvo una cobertura de 94,12\%. Además, no se generaron conjuntos vacíos en ninguno de los modelos.
+Las coberturas empíricas se mantuvieron cercanas al 95\,\% en los tres
+modelos. Ningún modelo generó conjuntos vacíos. La menor tasa de
+ambigüedad en MLP (4{,}3\,\%) refleja que sus fronteras de decisión más
+complejas producen predicciones de mayor certeza bajo esta cobertura, en
+contraste con las fronteras lineales de LR (7{,}5\,\%).
 
-En cuanto a la ambigüedad, Regresión Logística produjo la mayor cantidad de conjuntos ambiguos, con 204 casos, seguida por XGBoost con 179 y MLP con 116. El tamaño promedio de los conjuntos conformes fue cercano a 1 en los tres modelos, lo que indica que la mayoría de las instancias fueron clasificadas mediante conjuntos unitarios.
+\subsection{Análisis de ambigüedad por par de clases}
 
-\subsection{Primer análisis de ambigüedad}
-
-Como análisis preliminar, se revisaron los pares de clases más frecuentes en los conjuntos ambiguos generados por Regresión Logística. El par \textit{DERMASON--SIRA} concentró 113 instancias ambiguas, siendo el caso dominante. Otros pares relevantes fueron \textit{SEKER--SIRA} y \textit{BARBUNYA--CALI}, ambos con 23 instancias.
+La Tabla~\ref{tab:pares} muestra los pares de clases más frecuentes en
+los conjuntos ambiguos de LR. El par \textit{DERMASON}--\textit{SIRA}
+concentra 113 de las 204 instancias ambiguas (55{,}4\,\%), confirmando el
+alto solapamiento morfológico entre estas variedades descrito en la
+Sección~\ref{sec:datos}.
 
 \begin{table}[h]
 \centering
-\caption{Pares de clases más frecuentes en conjuntos ambiguos para Regresión Logística.}
-\label{tab:pares_ambiguos_preliminar}
+\caption{Pares de clases más frecuentes en conjuntos ambiguos (LR).}
+\label{tab:pares}
 \begin{tabular}{lc}
-\hline
+\toprule
 \textbf{Par de clases} & \textbf{N instancias} \\
-\hline
+\midrule
 DERMASON -- SIRA  & 113 \\
-SEKER -- SIRA     & 23 \\
-BARBUNYA -- CALI  & 23 \\
-HOROZ -- SIRA     & 15 \\
-CALI -- HOROZ     & 8 \\
-CALI -- SIRA      & 7 \\
-DERMASON -- SEKER & 6 \\
-BARBUNYA -- SIRA  & 5 \\
-\hline
+SEKER -- SIRA     & 23  \\
+BARBUNYA -- CALI  & 23  \\
+HOROZ -- SIRA     & 15  \\
+CALI -- HOROZ     & 8   \\
+CALI -- SIRA      & 7   \\
+DERMASON -- SEKER & 6   \\
+BARBUNYA -- SIRA  & 5   \\
+\bottomrule
 \end{tabular}
 \end{table}
 
-Estos resultados son consistentes con la dificultad observada en la clasificación de ciertas clases, especialmente \textit{SIRA}, que aparece en varios de los pares ambiguos más frecuentes.
+\subsection{Resolución contrafáctica}
 
-\subsection{Resultados preliminares de resolución contrafáctica}
-
-Finalmente, se ejecutó una primera prueba de resolución contrafáctica sobre las instancias ambiguas detectadas. La Tabla~\ref{tab:resolucion_contrafactual_preliminar} resume los resultados obtenidos.
+La Tabla~\ref{tab:contrafacticos} resume los resultados de la primera
+ejecución completa del optimizador contrafáctico.
 
 \begin{table}[t]
 \centering
-\caption{Resultados preliminares de resolución contrafáctica.}
-\label{tab:resolucion_contrafactual_preliminar}
-\resizebox{\columnwidth}{!}{
+\caption{Resultados de resolución contrafáctica.}
+\label{tab:contrafacticos}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{Modelo} & \textbf{N ambig.} & \textbf{Res.} & \textbf{Éxito} & \textbf{L2 prom.} & $\mathbf{d_M}$ \textbf{prom.} & \textbf{T total} \\
+\textbf{Modelo} & \textbf{N ambig.} & \textbf{Res.} & \textbf{Éxito} &
+\textbf{L2 prom.} & $\mathbf{d_M}$ \textbf{prom.} & \textbf{T total} \\
 \midrule
-LR      & 204 & 182 & 89,2\% & 0,3817 & 3,0098 & 34,0 min \\
-XGBoost & 179 & 3   & 1,7\%  & 0,2389 & 2,9971 & 29,9 min \\
-MLP     & 116 & 114 & 98,3\% & 0,2452 & 2,7679 & 19,3 min \\
+LR      & 204 & 182 & 89{,}2\% & 0{,}3817 & 3{,}0098 & 34{,}0 min \\
+XGBoost & 179 & 3   & 1{,}7\%  & 0{,}2389 & 2{,}9971 & 29{,}9 min \\
+MLP     & 116 & 114 & 98{,}3\% & 0{,}2452 & 2{,}7679 & 19{,}3 min \\
 \bottomrule
-\end{tabular}
-}
+\end{tabular}}
 \end{table}
 
-La resolución contrafáctica mostró resultados favorables para Regresión Logística y MLP. En Regresión Logística se resolvieron 182 de 204 instancias ambiguas, alcanzando una tasa de éxito de 89,2\%. En MLP se resolvieron 114 de 116 casos, con una tasa de éxito de 98,3\%. En ambos casos se supera el umbral preliminar del 70\% definido en el plan de evaluación.
+LR y MLP superaron ampliamente el umbral del 70\,\% definido en O2, con
+tasas de éxito de 89{,}2\,\% y 98{,}3\,\% respectivamente. XGBoost
+resolvió únicamente 3 de 179 instancias (1{,}7\,\%), lo que evidencia
+una limitación estructural de L-BFGS-B aplicado a modelos basados en
+árboles: sus fronteras de decisión constantes por trozos producen
+gradientes numéricos nulos en la mayoría del dominio, impidiendo que el
+optimizador encuentre direcciones de descenso efectivas. Este resultado
+contrasta marcadamente con el desempeño en LR y MLP, cuyos modelos
+suaves permiten la propagación de gradientes. La diferencia entre modelos
+constituye evidencia directa para el Objetivo O3 y será analizada
+estadísticamente mediante prueba de Wilcoxon en la evaluación final.
 
-En contraste, XGBoost resolvió solo 3 de 179 instancias ambiguas, alcanzando una tasa de éxito de 1,7\%. Este resultado sugiere que la estrategia actual de optimización contrafáctica resulta menos efectiva para modelos basados en árboles, posiblemente debido a la naturaleza no suave de sus fronteras de decisión.
-
-El tiempo total de la etapa contrafáctica fue de 83,2 minutos. El tiempo promedio por instancia fue cercano a 10 segundos en los tres modelos, debido al límite temporal impuesto al optimizador. La distancia de Mahalanobis condicional promedio se mantuvo cercana a 3, valor comparable con la media de referencia calculada sobre los datos reales de entrenamiento, igual a 3,3419.
+La distancia de Mahalanobis condicional promedio de los contrafácticos
+($d_M \approx 3{,}0$) es comparable con la media de referencia calculada
+sobre los datos reales de entrenamiento (3{,}3419), lo que indica que
+los contrafácticos generados son morfológicamente plausibles respecto a
+la distribución de la clase objetivo.
 
 \subsection{Observaciones preliminares}
 
-Los resultados iniciales permiten validar el funcionamiento general del pipeline. Los tres modelos base alcanzan desempeños similares, la predicción conforme produce coberturas empíricas cercanas al nivel objetivo y se identifican instancias ambiguas suficientes para evaluar el procedimiento contrafáctico. Además, las primeras pruebas muestran que la resolución de ambigüedad es factible para Regresión Logística y MLP, aunque presenta limitaciones importantes en XGBoost.
-
-Estos resultados deben interpretarse como preliminares. En etapas posteriores se realizará una evaluación más completa, incorporando análisis estadístico entre modelos, revisión de hiperparámetros y evaluación más detallada de la calidad de los contrafácticos generados.
+Los resultados iniciales validan el funcionamiento general del pipeline.
+Los modelos base alcanzan desempeños similares, la predicción conforme
+produce coberturas cercanas al nivel objetivo, y LR y MLP demuestran
+que la resolución de ambigüedad es factible con el optimizador propuesto.
+La baja tasa de XGBoost anticipa la necesidad de una estrategia de
+optimización alternativa para modelos no diferenciables, aspecto que
+será abordado en la evaluación final.
 
 % ─────────────────────────────────────────────
 \begin{thebibliography}{00}
